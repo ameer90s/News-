@@ -1,7 +1,7 @@
 {
   "name": "مرصد الإمارات الذكي",
   "short_name": "مرصد الإمارات",
-  "description": "غرفة أخبار واستخبارات استراتيجية للأخبار السياسية والاقتصادية والعسكرية",
+  "description": "منصة ذكية لمتابعة أهم الأخبار وتحليلها وتأثيرها المحتمل على الإمارات.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#07111d",
@@ -10,7 +10,7 @@
   "dir": "rtl",
   "icons": [
     {
-      "src": "/static/icon.svg",
+      "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

@@ -1,6 +1,7 @@
 const STATE = {
   hours: 24,
   payload: null,
+  deferredPrompt: null,
 };
 
 const topicMap = {
@@ -15,6 +16,36 @@ function esc(v = '') {
 
 function setStatus(text) {
   document.getElementById('statusLive').textContent = text;
+  const hint = document.getElementById('progressHint');
+  if (hint) hint.textContent = text;
+}
+
+function setLoading(isLoading) {
+  const btn = document.getElementById('refreshBtn');
+  const label = btn.querySelector('.btn-label');
+  btn.classList.toggle('loading', isLoading);
+  btn.disabled = isLoading;
+  label.textContent = isLoading ? 'جاري التحديث...' : 'تحديث وتحليل';
+}
+
+function formatUAETime(date = new Date()) {
+  return new Intl.DateTimeFormat('ar-AE', {
+    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Dubai'
+  }).format(date);
+}
+
+function formatUAEDateTime(isoString) {
+  if (!isoString) return '—';
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('ar-AE', {
+    timeZone: 'Asia/Dubai', day: '2-digit', month: '2-digit', hour: 'numeric', minute: '2-digit', hour12: true
+  }).format(d);
+}
+
+function updateUAEClock() {
+  const el = document.getElementById('uaeTime');
+  if (el) el.textContent = formatUAETime();
 }
 
 function riskFromScore(score = 0) {
@@ -121,9 +152,11 @@ function render(payload) {
   renderHome(payload);
   renderTopics(payload);
   renderBreaking(payload.top_events || []);
+  document.getElementById('lastUpdated').textContent = formatUAEDateTime(payload.meta?.updated_at);
 }
 
 async function loadDashboard(forceRefresh = false) {
+  setLoading(true);
   setStatus(forceRefresh ? 'جاري التحديث والتحليل...' : 'جاري تحميل غرفة الأخبار...');
   const endpoint = forceRefresh ? `/api/refresh?hours=${STATE.hours}` : `/api/dashboard?hours=${STATE.hours}`;
   const method = forceRefresh ? 'POST' : 'GET';
@@ -133,7 +166,7 @@ async function loadDashboard(forceRefresh = false) {
     const payload = await res.json();
     render(payload);
     localStorage.setItem('strategicNewsroomCache', JSON.stringify(payload));
-    setStatus(`تم التحديث • ${payload.meta?.article_count || 0} مادة تقريبًا`);
+    setStatus(`تم التحديث بنجاح • ${payload.meta?.article_count || 0} مادة تقريبًا`);
   } catch (e) {
     const cached = localStorage.getItem('strategicNewsroomCache');
     if (cached) {
@@ -144,6 +177,8 @@ async function loadDashboard(forceRefresh = false) {
       document.getElementById('topEvents').innerHTML = '<div class="empty">تعذر تحميل البيانات الآن. حاولي مرة أخرى بعد قليل.</div>';
       renderBreaking([]);
     }
+  } finally {
+    setLoading(false);
   }
 }
 
@@ -178,10 +213,7 @@ function setupActions() {
   document.getElementById('refreshBtn').addEventListener('click', () => loadDashboard(true));
   document.getElementById('shareBtn').addEventListener('click', async () => {
     const hero = STATE.payload?.hero;
-    const text = hero ? `مرصد الإمارات الذكي
-أهم حدث الآن: ${hero.title}
-الأهمية: ${hero.score}/100
-الثقة: ${hero.confidence}` : 'مرصد الإمارات الذكي';
+    const text = hero ? `مرصد الإمارات الذكي\nأهم حدث الآن: ${hero.title}\nالأهمية: ${hero.score}/100\nالثقة: ${hero.confidence}` : 'مرصد الإمارات الذكي';
     if (navigator.share) {
       try { await navigator.share({ title: 'مرصد الإمارات الذكي', text, url: location.href }); } catch {}
     } else {
@@ -189,9 +221,34 @@ function setupActions() {
       alert('تم نسخ الملخص');
     }
   });
+
+  const installBtn = document.getElementById('installBtn');
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    STATE.deferredPrompt = e;
+    installBtn.classList.remove('hidden');
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (!STATE.deferredPrompt) {
+      alert('إذا لم يظهر خيار التثبيت، افتحي قائمة المتصفح واختاري: Add to Home Screen');
+      return;
+    }
+    STATE.deferredPrompt.prompt();
+    await STATE.deferredPrompt.userChoice.catch(() => null);
+    STATE.deferredPrompt = null;
+    installBtn.classList.add('hidden');
+  });
+
+  window.addEventListener('appinstalled', () => {
+    installBtn.classList.add('hidden');
+    setStatus('تم تثبيت التطبيق على الهاتف');
+  });
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+updateUAEClock();
+setInterval(updateUAEClock, 1000);
 setupTabs();
 setupFilters();
 setupActions();
