@@ -17,9 +17,9 @@ CACHE_TTL_SECONDS = 300
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
 try:
-    AI_TIMEOUT_SECONDS = max(3.0, min(float(os.getenv("AI_TIMEOUT_SECONDS", "8")), 12.0))
+    AI_TIMEOUT_SECONDS = max(3.0, min(float(os.getenv("AI_TIMEOUT_SECONDS", "10")), 14.0))
 except ValueError:
-    AI_TIMEOUT_SECONDS = 8.0
+    AI_TIMEOUT_SECONDS = 10.0
 
 # ---- Flat-file frontend routes (all files live beside main.py) ----
 @app.get("/")
@@ -104,6 +104,21 @@ def _normalize_ai_analysis(raw):
     }
 
 
+def _normalize_translations(raw):
+    if not isinstance(raw, dict):
+        return {}
+    import re
+    out = {}
+    for key, value in raw.items():
+        key = str(key or '').strip()
+        if not re.match(r'^(political|economic|military)_\d{1,2}$', key):
+            continue
+        text = str(value or '').strip()
+        if text:
+            out[key] = text[:360]
+    return out
+
+
 def _extract_gemini_text(data):
     # REST GenerateContent responses expose text in candidates[].content.parts[].
     # Ignore thought parts if present and join only visible text output.
@@ -149,6 +164,7 @@ def _call_gemini_analysis(context):
 اكتب بالعربية الواضحة والمحايدة. فرّق ضمنيًا بين ما هو مؤكد وما هو استنتاج تحليلي. ركّز على: لماذا يهم الحدث، السياق الأوسع، الروايات المحتملة، السيناريوهات، وما الذي يجب مراقبته، مع زاوية عملية لتأثيره المحتمل على الإمارات.
 أعد JSON فقط بلا Markdown وبالبنية التالية حرفيًا:
 {
+  "translations": {"political_0":"عنوان عربي...","economic_0":"عنوان عربي...","military_0":"عنوان عربي..."},
   "big_picture": {"title":"...","summary":"...","uae_angle":"...","confidence":"مرتفع|متوسط|أولي"},
   "analyses": {
     "political": {"headline":"...","summary":"...","why_it_matters":"...","background":"...","narratives":["..."],"actors":["..."],"scenarios":["..."],"what_to_watch":["..."],"uae_angle":"...","confidence":"مرتفع|متوسط|أولي"},
@@ -156,20 +172,20 @@ def _call_gemini_analysis(context):
     "military": {"headline":"...","summary":"...","why_it_matters":"...","background":"...","narratives":["..."],"actors":["..."],"scenarios":["..."],"what_to_watch":["..."],"uae_angle":"...","confidence":"مرتفع|متوسط|أولي"}
   }
 }
+في translations: أعد ترجمة عربية طبيعية ومهنية لكل id موجود في البيانات، مع الحفاظ على أسماء الأشخاص والشركات والأماكن والأرقام، ولا تترك عنوانًا إنجليزيًا ما دام له id. لا تترجم أسماء النطاقات أو المصادر.
 اجعل big_picture موجزًا جدًا، والتحليلات مركزة وليست مطولة. إذا كانت بيانات مجال ما ضعيفة فاذكر ذلك ولا تعوض النقص بالتخمين.
 """.strip()
 
     request_payload = {
-        "system_instruction": {"parts": [{"text": instructions}]},
+        "systemInstruction": {"parts": [{"text": instructions}]},
         "contents": [{
             "role": "user",
             "parts": [{"text": json.dumps(context, ensure_ascii=False, separators=(",", ":"))}],
         }],
         "generationConfig": {
             "temperature": 0.2,
-            "maxOutputTokens": 2200,
+            "maxOutputTokens": 4600,
             "responseMimeType": "application/json",
-            "thinkingConfig": {"thinkingLevel": "low"},
         },
     }
     model_path = quote(GEMINI_MODEL, safe="-._")
@@ -187,6 +203,7 @@ def _call_gemini_analysis(context):
         raw = json.loads(response.read().decode("utf-8", errors="replace"))
 
     parsed = _parse_ai_json(_extract_gemini_text(raw))
+    translations = _normalize_translations(parsed.get("translations") if isinstance(parsed, dict) else None)
     analyses_raw = parsed.get("analyses") if isinstance(parsed, dict) else None
     analyses = {}
     for topic in ("political", "economic", "military"):
@@ -203,7 +220,9 @@ def _call_gemini_analysis(context):
     }
     if not analyses:
         raise ValueError("AI response did not contain usable analyses")
-    return {"big_picture": big_picture, "analyses": analyses}
+    if not translations:
+        raise ValueError("AI response did not contain usable headline translations")
+    return {"translations": translations, "big_picture": big_picture, "analyses": analyses}
 
 
 @app.post("/api/ai-analysis")
@@ -224,10 +243,11 @@ def ai_analysis(body: dict = Body(...)):
     context = {"hours": hours, "events": {}}
     for topic in ("political", "economic", "military"):
         compact = []
-        for event in (topics.get(topic) or [])[:4]:
+        for event in (topics.get(topic) or [])[:12]:
             if not isinstance(event, dict):
                 continue
             compact.append({
+                "id": str(event.get("id") or "")[:40],
                 "title": str(event.get("title") or "")[:500],
                 "score": event.get("score"),
                 "confidence": event.get("confidence"),
@@ -498,7 +518,7 @@ def _news_engine(hours: int):
         if not evs:
             return {"headline":f"لا توجد مادة كافية في المجال {label}","summary":"لم تجمع المنصة مادة كافية ضمن النافذة الزمنية المحددة.","why_it_matters":"الصورة غير مكتملة حاليًا.","background":"أعد التحديث أو وسّع الفترة.","narratives":["لا توجد روايات كافية للمقارنة."],"actors":[],"scenarios":["انتظار تقارير إضافية."],"what_to_watch":["تأكيدات رسمية","مصادر إضافية"],"uae_angle":"لا يتوافر أثر واضح حاليًا.","confidence":"أولي"}
         h=evs[0]
-        return {"headline":h['title'],"summary":f"في المجال {label} يتصدر حاليًا: {h['title']}.","why_it_matters":"لأنه من أعلى الأحداث أهمية في التغطية الحالية وقد يعكس اتجاهًا أوسع.","background":"القراءة تربط الحدث بالسياق الإقليمي والدولي بدل الاكتفاء بالعنوان.","narratives":["الرواية المباشرة للحدث كما تظهر في المصادر الرئيسية.","الرواية الإقليمية والدولية الأوسع وتأثيرها المحتمل."],"actors":h.get('sources',[])[:5],"scenarios":["استمرار التطور وارتفاع أهميته.","تهدئة وتراجع الأثر.","اتساع الأثر إلى ملفات سياسية أو اقتصادية أو أمنية أخرى."],"what_to_watch":["بيانات رسمية","تأكيدات مستقلة","تغير حجم التغطية"],"uae_angle":"يُقاس الأثر على الإمارات عبر الطاقة والتجارة والملاحة والأسواق والتحولات الإقليمية.","confidence":h.get('confidence','أولي')}
+        return {"headline":h['title'],"summary":f"تتصدر هذه المجموعة من التطورات التغطية الحالية في المجال {label} وفق مستوى الأهمية واتساع المصادر.","why_it_matters":"لأنها من أعلى الأحداث أهمية في التغطية الحالية وقد تعكس اتجاهًا أوسع.","background":"القراءة تربط التطورات بالسياق الإقليمي والدولي بدل الاكتفاء بعنوان واحد.","narratives":["الرواية المباشرة للحدث كما تظهر في المصادر الرئيسية.","الرواية الإقليمية والدولية الأوسع وتأثيرها المحتمل."],"actors":h.get('sources',[])[:5],"scenarios":["استمرار التطور وارتفاع أهميته.","تهدئة وتراجع الأثر.","اتساع الأثر إلى ملفات سياسية أو اقتصادية أو أمنية أخرى."],"what_to_watch":["بيانات رسمية","تأكيدات مستقلة","تغير حجم التغطية"],"uae_angle":"يُقاس الأثر على الإمارات عبر الطاقة والتجارة والملاحة والأسواق والتحولات الإقليمية.","confidence":h.get('confidence','أولي')}
 
     analyses={t:analyze(t,events[t]) for t in topic_labels}
     all_events=sorted([e for lst in events.values() for e in lst],key=lambda x:x['score'],reverse=True)

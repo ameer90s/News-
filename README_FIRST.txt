@@ -6,12 +6,12 @@
 3) لتفعيل Gemini: Vercel > Project > Settings > Environment Variables
    أضف: GEMINI_API_KEY = المفتاح من Google AI Studio
    اختياري: GEMINI_MODEL = gemini-3.8-flash
-   اختياري: AI_TIMEOUT_SECONDS = 8
+   اختياري: AI_TIMEOUT_SECONDS = 10
    ثم اضغط Redeploy.
 
 فحص سريع بعد النشر:
 - افتح /api/health وتأكد أن ai.enabled = true و ai.provider = gemini.
-- الصفحة الرئيسية يجب أن تعرض الأخبار أولًا، ثم يحسن Gemini الصورة الكبرى والتحليلات.
+- الصفحة تبني بطاقات الأخبار فورًا، ثم يعرب Gemini العناوين ويحسن الصورة الكبرى والتحليلات في طلب واحد.
 
 مهم:
 - لا تضع GEMINI_API_KEY داخل GitHub أو app.js أو index.html.

@@ -1,49 +1,40 @@
-# QA Report — UAE Smart Observatory Gemini v10
+# QA Report — UAE Smart Observatory Gemini v11
 
-Validated before packaging:
+## ما تغيّر
+- تقوية Glass للأقسام الرئيسية مع إبقاء الخلفية مرئية.
+- جعل شريط التنقل السفلي أغمق حتى لا يختلط مع النص خلفه.
+- تلوين تأثير سياسي/اقتصادي/عسكري حسب `uae_impact`: منخفض أخضر، متوسط أصفر، مرتفع أحمر.
+- تحسين بطاقات التحليل المتكامل بهرمية أبسط وحد علوي بلون التأثير.
+- إبقاء رقم الأهمية بجانب عنوان الخبر على الجوال بدل تحويله لشريط كامل.
+- تعريب عناوين الأحداث عبر Gemini مع الحفاظ على عناوين المصادر الأصلية داخل قسم المصادر القابل للفتح.
+- استبدال BIG PICTURE BRIEF بـ "الصورة الكبرى".
 
-## Gemini migration
-- OpenAI integration removed from runtime code and environment configuration.
-- Gemini provider uses server-side `GEMINI_API_KEY` only.
-- Default model: `gemini-3.8-flash`.
-- REST request uses Google Gemini GenerateContent endpoint with `x-goog-api-key`.
-- JSON response mode enabled; output is normalized before reaching the UI.
-- Gemini thinking level set to `low` for lower latency on this short news-analysis task.
-- No Google Search grounding is enabled; Gemini analyzes only the event metadata already collected by the app.
-- With no key: safe built-in-analysis fallback verified.
-- With mocked Gemini success: Big Picture + political/economic/military analyses verified.
-- With mocked Gemini/API failure: endpoint returns `used:false`; news/local analysis continue.
-- AI cache key bumped to V10 so old OpenAI analysis cache is not reused.
+## Gemini
+- النموذج الافتراضي: `gemini-3.8-flash`.
+- المفتاح يبقى في Vercel فقط تحت `GEMINI_API_KEY`.
+- طلب REST يستخدم `systemInstruction` و`generationConfig.responseMimeType=application/json`.
+- لا يوجد Gemini SDK أو Google Search Grounding.
+- Gemini يعيد الترجمات + الصورة الكبرى + التحليلات في طلب واحد.
+- Cache للـAI لمدة 10 دقائق ومفتاح cache جديد V11.
+- إذا تعطل Gemini، جلب الأخبار نفسه لا يتوقف.
 
-## News pipeline
-- GDELT + Google News RSS parsing/ranking path tested with mocked provider responses.
-- Test produced 15 articles and populated all 3 topic groups.
-- Empty/failed upstream feeds remain handled as an error or stale-cache fallback rather than an endless loading state.
-- Live external feed calls cannot be validated from the packaging sandbox because outbound DNS is unavailable there; provider logic itself is covered by deterministic integration tests.
-
-## Frontend / responsive
-- Python syntax: `app.py` + `main.py` pass `py_compile`.
-- JavaScript syntax: `app.js` passes `node --check`.
-- Responsive structural tests passed at 412px / 360px / 320px.
-- No horizontal document overflow at tested widths.
-- Header title remains one line at all 3 widths; ~30px at 412px.
-- Description remains one line and fully fits at 412 / 360 / 320px.
-- Header controls end before 180px at all tested widths.
-- Refresh loading state: spinner visible, button disabled, controls stay on one row.
-- 6/12/24/48/72 hour controls stay fully inside viewport.
-- Active period color verified: rgba(155,231,255,0.22) + matching border.
-- 3 metric cards remain horizontal and equal-width.
-- No Install button and no “توقيت الإمارات” text.
-- Small <=330px header padding adjustment added only to guarantee the one-line description at 320px.
-
-## Deployment / unchanged assets
-- `background.webp` unchanged.
-- `icon.svg` unchanged.
-- `manifest.webmanifest` unchanged.
-- `main.py` unchanged.
-- `vercel.json` unchanged.
-- `requirements.txt` unchanged; no Gemini SDK is required.
-- `pyproject.toml` unchanged.
-- Service worker cache bumped to `strategic-newsroom-v10`.
-- Asset query versions bumped to `?v=10`.
-- No `/static/` paths remain.
+## اختبارات منفذة
+- Python: `app.py` و`main.py` compile بنجاح.
+- JavaScript: `app.js` و`sw.js` syntax check بنجاح.
+- Gemini request mock: تحقق من endpoint، `systemInstruction`، JSON output، والترجمات.
+- News engine mock: 15 مادة، والمجالات الثلاثة ممتلئة.
+- Fallback: تعطيل GDELT بالكامل واستمرار Google News RSS بـ 6 مواد.
+- Responsive Playwright: 412px و360px و320px بلا horizontal overflow.
+- العنوان: سطر واحد؛ 29.99px على 412px.
+- الوصف: سطر واحد على المقاسات الثلاثة.
+- آخر عناصر التحكم قبل 180px: 148.17px على 412px، و140.5px على 360/320.
+- أزرار المدة الخمسة كاملة داخل الشاشة على 412/360/320.
+- Spinner: `جاري التحديث...` + disabled + no overflow.
+- 48 ساعة: اللون النشط `rgba(155,231,255,0.22)` والحد `rgba(155,231,255,0.6)`.
+- AI mock: الصورة الكبرى و6 عناوين أخبار ظاهرة كلها بالعربية في الاختبار.
+- قبل وصول AI: العناوين الإنجليزية لا تظهر للمستخدم؛ يظهر مؤقتًا "جاري تعريب الخبر…".
+- بطاقات التأثير: 82%=مرتفع أحمر، 58%=متوسط أصفر، 22%=منخفض أخضر.
+- لا يوجد زر Install.
+- لا توجد مسارات `/static/`.
+- `background.webp`, `main.py`, `vercel.json`, `requirements.txt`, `pyproject.toml`, `icon.svg`, `manifest.webmanifest` لم تتغير Byte-for-Byte عن v10.
+- Service Worker cache: `strategic-newsroom-v11`; CSS/JS query version = 11.

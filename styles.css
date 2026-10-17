@@ -399,3 +399,215 @@ body { min-height: 100vh; overflow-x: hidden; }
 @media (max-width: 360px) {
   .chip { font-size: 10px; padding-inline: 1px; }
 }
+
+/* v11 — readability pass: clearer glass, calmer hierarchy, impact colours. */
+:root {
+  --glass-strong: rgba(4, 16, 26, 0.66);
+  --glass-medium: rgba(4, 16, 26, 0.56);
+  --glass-soft-v11: rgba(4, 16, 26, 0.46);
+  --impact-low: #52d6a3;
+  --impact-mid: #f0c260;
+  --impact-high: #ff8e83;
+}
+
+.glass, .glass-soft,
+.hero-panel, .big-picture, .analysis-card, .analysis-panel, .news-card,
+.breaking-wrap, .metric-card, .score-box, .tag, .bottom-nav, .bottom-tab {
+  -webkit-backdrop-filter: blur(14px) saturate(112%);
+  backdrop-filter: blur(14px) saturate(112%);
+}
+
+/* Keep the header lighter so the background remains visible; content sections get
+   a stronger glass sheet so text and card boundaries are obvious on a busy image. */
+.hero-panel {
+  background: linear-gradient(180deg, rgba(4,16,26,.43), rgba(4,16,26,.38));
+  border-color: rgba(155,220,255,.36);
+}
+.breaking-wrap { background: rgba(4,16,26,.50); }
+.big-picture {
+  background: linear-gradient(180deg, rgba(4,16,26,.66), rgba(4,16,26,.60));
+  border-color: rgba(155,220,255,.34);
+  box-shadow: 0 14px 34px rgba(0,0,0,.28);
+}
+.analysis-card, .analysis-panel, .news-card {
+  background: linear-gradient(180deg, rgba(4,16,26,.70), rgba(4,16,26,.64));
+  border-color: rgba(155,220,255,.30);
+  box-shadow: 0 12px 30px rgba(0,0,0,.28);
+}
+.bottom-nav {
+  background: rgba(4,16,26,.80);
+  border-color: rgba(155,220,255,.26);
+  box-shadow: 0 -8px 26px rgba(0,0,0,.30);
+}
+.bottom-tab { background: rgba(255,255,255,.025); }
+.bottom-tab.active { background: rgba(28, 83, 112, .64); }
+
+.big-left h2 {
+  line-height: 1.55;
+  text-wrap: balance;
+}
+.big-left p {
+  margin-bottom: 0;
+  line-height: 1.8;
+}
+.eyebrow {
+  letter-spacing: .08em;
+  font-size: .78rem;
+}
+
+/* Impact cards: colour is driven by UAE impact percentage, not the ranking score. */
+.metric-card {
+  position: relative;
+  overflow: hidden;
+  background: rgba(4,16,26,.58);
+  transition: background .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.metric-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: rgba(155,220,255,.28);
+}
+.metric-card::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  left: 8px;
+  bottom: 7px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(to left, currentColor var(--impact-value, 0%), rgba(255,255,255,.09) var(--impact-value, 0%));
+  opacity: .8;
+}
+.metric-card.impact-low {
+  color: var(--impact-low);
+  border-color: rgba(82,214,163,.42);
+  background: linear-gradient(180deg, rgba(17,67,55,.50), rgba(4,16,26,.64));
+  box-shadow: inset 0 3px 0 rgba(82,214,163,.76);
+}
+.metric-card.impact-mid {
+  color: var(--impact-mid);
+  border-color: rgba(240,194,96,.44);
+  background: linear-gradient(180deg, rgba(76,60,25,.50), rgba(4,16,26,.64));
+  box-shadow: inset 0 3px 0 rgba(240,194,96,.82);
+}
+.metric-card.impact-high {
+  color: var(--impact-high);
+  border-color: rgba(255,142,131,.46);
+  background: linear-gradient(180deg, rgba(79,37,38,.54), rgba(4,16,26,.66));
+  box-shadow: inset 0 3px 0 rgba(255,142,131,.86);
+}
+.metric-card .metric-label { color: #f7fbff; }
+.metric-card b { color: currentColor; }
+.metric-card .metric-impact { color: currentColor; opacity: .98; }
+
+/* Main analysis cards borrow the clear hierarchy of the reference without copying it. */
+.analysis-card {
+  position: relative;
+  overflow: hidden;
+  padding: 17px 17px 16px;
+}
+.analysis-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: var(--card-accent, rgba(155,220,255,.62));
+}
+.analysis-card.impact-low { --card-accent: var(--impact-low); }
+.analysis-card.impact-mid { --card-accent: var(--impact-mid); }
+.analysis-card.impact-high { --card-accent: var(--impact-high); }
+.analysis-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+.analysis-card-head h4 { margin: 0; font-size: 1.05rem; }
+.impact-badge {
+  flex: 0 0 auto;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: .68rem;
+  line-height: 1.2;
+  font-weight: 800;
+  white-space: nowrap;
+  background: rgba(255,255,255,.035);
+}
+.impact-badge.impact-low { color: var(--impact-low); }
+.impact-badge.impact-mid { color: var(--impact-mid); }
+.impact-badge.impact-high { color: var(--impact-high); }
+.analysis-card .analysis-summary {
+  margin: 0 0 9px;
+  line-height: 1.8;
+}
+.analysis-card .uae-angle {
+  margin: 0;
+  padding-top: 9px;
+  border-top: 1px solid rgba(155,220,255,.14);
+  color: #dff3fb;
+}
+.analysis-card .confidence-line {
+  margin: 8px 0 0;
+  color: #b9ced9;
+  font-size: .78rem;
+  line-height: 1.55;
+}
+
+/* News cards: compact ranking block stays beside the headline on mobile. */
+.news-card { padding: 16px; }
+.news-card .top {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.score-box {
+  min-width: 0;
+  width: 58px;
+  padding: 10px 5px;
+  border-radius: 16px;
+  background: rgba(9,31,43,.74);
+}
+.score-box b { font-size: 1.08rem; line-height: 1.15; }
+.score-box small { font-size: .68rem; line-height: 1.3; }
+.news-card h4 {
+  font-size: 1rem;
+  line-height: 1.75;
+  margin: 0;
+}
+.news-meta { gap: 6px; margin-top: 9px; }
+.tag {
+  background: rgba(9,31,43,.72);
+  padding: 5px 8px;
+  font-size: .72rem;
+}
+.source-item a { line-height: 1.65; }
+.source-item small { margin-top: 3px; }
+
+/* Avoid text from the page visually bleeding through the fixed nav. */
+.shell { padding-bottom: 126px; }
+
+@media (max-width: 640px) {
+  .big-picture { gap: 14px; }
+  .metric-card { min-height: 88px; padding-bottom: 14px; }
+  .analysis-card, .analysis-panel, .news-card { border-radius: 20px; }
+  .section-head { align-items: center; gap: 10px; }
+  .section-head h3 { font-size: 1.18rem; }
+  .section-head span { font-size: .76rem; }
+  .news-card .top { grid-template-columns: 54px minmax(0, 1fr); gap: 10px; }
+  .score-box { width: 54px; }
+  .news-card h4 { font-size: .95rem; }
+}
+
+@media (max-width: 360px) {
+  .analysis-card-head { gap: 7px; }
+  .impact-badge { font-size: .62rem; padding: 4px 6px; }
+  .news-card { padding: 14px; }
+  .news-card .top { grid-template-columns: 50px minmax(0, 1fr); gap: 9px; }
+  .score-box { width: 50px; }
+  .tag { font-size: .68rem; padding: 4px 6px; }
+}

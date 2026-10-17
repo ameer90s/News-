@@ -2,6 +2,7 @@ const STATE = {
   hours: 24,
   payload: null,
   requestId: 0,
+  aiPending: false,
 };
 
 const topicMap = {
@@ -151,6 +152,36 @@ function fitHeaderText() {
   fitHeaderDescription();
 }
 
+function containsArabic(text = '') {
+  return /[\u0600-\u06FF]/.test(String(text));
+}
+
+function displayTitle(event = {}) {
+  const translated = String(event.title_ar || '').trim();
+  if (translated) return translated;
+  const original = String(event.title || '').trim();
+  if (!original) return 'خبر بدون عنوان';
+  if (containsArabic(original)) return original;
+  if (STATE.aiPending) return 'جاري تعريب الخبر…';
+  return original;
+}
+
+function impactLevel(value, hasData = true) {
+  if (!hasData) return 'none';
+  const n = Math.max(0, Math.min(100, Number(value || 0)));
+  if (n >= 67) return 'high';
+  if (n >= 34) return 'mid';
+  return 'low';
+}
+
+function impactLabel(value, hasData = true) {
+  const level = impactLevel(value, hasData);
+  if (level === 'high') return 'مرتفع';
+  if (level === 'mid') return 'متوسط';
+  if (level === 'low') return 'منخفض';
+  return '—';
+}
+
 function riskFromScore(score = 0, hasData = true) {
   if (!hasData) return '—';
   if (score >= 72) return 'مرتفع';
@@ -199,8 +230,8 @@ function eventCard(e) {
     <article class="news-card">
       <div class="top">
         <div class="score-box"><b>${esc(e.score)}</b><small>أهمية</small></div>
-        <div>
-          <h4>${esc(e.title)}</h4>
+        <div class="news-main">
+          <h4>${esc(displayTitle(e))}</h4>
           <div class="news-meta">
             <span class="tag ${tagClass(e.score)}">الثقة: ${esc(e.confidence)}</span>
             <span class="tag uae">أثر الإمارات: ${esc(e.uae_impact)}%</span>
@@ -210,14 +241,14 @@ function eventCard(e) {
         </div>
       </div>
       <details class="sources">
-        <summary>عرض المصادر والروايات</summary>
+        <summary>عرض المصادر الأصلية</summary>
         ${sources}
       </details>
     </article>`;
 }
 
 function renderBreaking(topEvents = []) {
-  const html = (topEvents || []).slice(0, 6).map((e) => `<span>• ${esc(e.title)}</span>`).join('');
+  const html = (topEvents || []).slice(0, 6).map((e) => `<span>• ${esc(displayTitle(e))}</span>`).join('');
   document.getElementById('breakingItems').innerHTML = html || '<span>جاري تجهيز أهم الأخبار الهامة...</span>';
 }
 
@@ -225,19 +256,27 @@ function renderHome(payload) {
   const hero = payload.hero;
   if (hero) {
     const bigPicture = payload.big_picture || {};
-    document.getElementById('heroTitle').textContent = bigPicture.title || hero.title;
+    document.getElementById('heroTitle').textContent = bigPicture.title || displayTitle(hero);
     document.getElementById('heroText').textContent = bigPicture.summary || `الأهمية ${hero.score}/100 • الثقة ${hero.confidence} • الأثر على الإمارات ${hero.uae_impact}%`;
   }
   document.getElementById('topCount').textContent = `${(payload.top_events || []).length} أحداث`;
   document.getElementById('topEvents').innerHTML = (payload.top_events || []).length ? payload.top_events.map(eventCard).join('') : '<div class="empty">لا توجد نتائج كافية.</div>';
   document.getElementById('overviewCards').innerHTML = Object.keys(topicMap).map((topic) => {
     const a = payload.analyses?.[topic] || {};
+    const topEvent = (payload.events?.[topic] || [])[0] || {};
+    const hasImpact = topEvent.uae_impact !== undefined && topEvent.uae_impact !== null && topEvent.uae_impact !== '';
+    const level = impactLevel(topEvent.uae_impact, hasImpact);
+    const levelClass = level === 'none' ? '' : `impact-${level}`;
+    const impactText = hasImpact ? `${impactLabel(topEvent.uae_impact, true)} • ${topEvent.uae_impact}%` : 'غير متاح';
     return `
-      <article class="analysis-card">
-        <h4>${esc(topicMap[topic].label)}</h4>
-        <p>${esc(a.summary || '')}</p>
-        <p><strong>زاوية الإمارات:</strong> ${esc(a.uae_angle || '')}</p>
-        <p><strong>الثقة:</strong> ${esc(a.confidence || 'أولي')}</p>
+      <article class="analysis-card ${levelClass}">
+        <div class="analysis-card-head">
+          <h4>${esc(topicMap[topic].label)}</h4>
+          <span class="impact-badge ${levelClass}">التأثير ${esc(impactText)}</span>
+        </div>
+        <p class="analysis-summary">${esc(a.summary || '')}</p>
+        <p class="uae-angle"><strong>زاوية الإمارات:</strong> ${esc(a.uae_angle || '')}</p>
+        <p class="confidence-line">الثقة: ${esc(a.confidence || 'أولي')}</p>
       </article>`;
   }).join('');
 }
@@ -250,13 +289,23 @@ function renderTopics(payload) {
       return Number(current?.score || 0) > Number(best?.score || 0) ? current : best;
     }, events[0] || {});
 
-    document.getElementById(meta.riskId).textContent = riskFromScore(topEvent.score || 0, events.length > 0);
+    const hasImpact = events.length > 0 && topEvent.uae_impact !== undefined && topEvent.uae_impact !== null && topEvent.uae_impact !== '';
+    const impactValue = hasImpact ? Math.max(0, Math.min(100, Number(topEvent.uae_impact || 0))) : 0;
+    const level = impactLevel(impactValue, hasImpact);
+    const riskEl = document.getElementById(meta.riskId);
+    if (riskEl) riskEl.textContent = impactLabel(impactValue, hasImpact);
+
+    const metricCard = riskEl?.closest('.metric-card');
+    if (metricCard) {
+      metricCard.classList.remove('impact-low', 'impact-mid', 'impact-high');
+      if (level !== 'none') metricCard.classList.add(`impact-${level}`);
+      metricCard.style.setProperty('--impact-value', `${impactValue}%`);
+    }
 
     const impact = document.getElementById(meta.impactId);
-    const hasImpact = topEvent.uae_impact !== undefined && topEvent.uae_impact !== null && topEvent.uae_impact !== '';
     if (impact) {
       impact.hidden = !hasImpact;
-      impact.textContent = hasImpact ? `التأثير: ${topEvent.uae_impact}%` : '';
+      impact.textContent = hasImpact ? `التأثير ${impactValue}%` : '';
     }
 
     document.getElementById(meta.analysisId).innerHTML = analysisHtml(analysis, `تحليل ${meta.label}`);
@@ -271,8 +320,9 @@ function render(payload) {
   renderBreaking(payload.top_events || []);
 }
 
-function compactAIEvent(event = {}) {
+function compactAIEvent(event = {}, id = '') {
   return {
+    id,
     title: event.title || '',
     score: event.score ?? null,
     confidence: event.confidence || '',
@@ -287,7 +337,7 @@ function compactAIEvent(event = {}) {
 function buildAIContext(payload) {
   const events = {};
   Object.keys(topicMap).forEach((topic) => {
-    events[topic] = (payload.events?.[topic] || []).slice(0, 4).map(compactAIEvent);
+    events[topic] = (payload.events?.[topic] || []).slice(0, 12).map((event, index) => compactAIEvent(event, `${topic}_${index}`));
   });
   return { hours: STATE.hours, events };
 }
@@ -303,7 +353,7 @@ function buildAISignature(payload) {
 
 function getCachedAI(signature) {
   try {
-    const cached = JSON.parse(storageGet('strategicNewsroomAICacheV10') || 'null');
+    const cached = JSON.parse(storageGet('strategicNewsroomAICacheV11') || 'null');
     if (!cached || cached.signature !== signature || !cached.data) return null;
     if (Date.now() - Number(cached.cachedAt || 0) > 10 * 60 * 1000) return null;
     return cached.data;
@@ -313,11 +363,32 @@ function getCachedAI(signature) {
 }
 
 function saveCachedAI(signature, data) {
-  storageSet('strategicNewsroomAICacheV10', JSON.stringify({ signature, data, cachedAt: Date.now() }));
+  storageSet('strategicNewsroomAICacheV11', JSON.stringify({ signature, data, cachedAt: Date.now() }));
 }
 
 function applyAIResult(payload, aiResult) {
   if (!aiResult?.used || !aiResult.analyses) return false;
+
+  const titleMap = new Map();
+  const translations = aiResult.translations || {};
+  Object.keys(topicMap).forEach((topic) => {
+    (payload.events?.[topic] || []).slice(0, 12).forEach((event, index) => {
+      let translated = String(translations[`${topic}_${index}`] || '').trim();
+      if (!translated && index === 0) translated = String(aiResult.analyses?.[topic]?.headline || '').trim();
+      if (!translated) return;
+      event.title_ar = translated;
+      if (event.title) titleMap.set(event.title, translated);
+    });
+  });
+  (payload.top_events || []).forEach((event) => {
+    const translated = titleMap.get(event.title);
+    if (translated) event.title_ar = translated;
+  });
+  if (payload.hero) {
+    const translated = titleMap.get(payload.hero.title);
+    if (translated) payload.hero.title_ar = translated;
+  }
+
   payload.analyses = { ...(payload.analyses || {}), ...aiResult.analyses };
   if (aiResult.big_picture?.summary || aiResult.big_picture?.title) payload.big_picture = aiResult.big_picture;
   payload.meta = payload.meta || {};
@@ -345,7 +416,7 @@ async function enhanceWithAI(payload, requestId) {
 
   setStatus('الأخبار جاهزة — جاري التحليل بالذكاء الاصطناعي...');
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId = controller ? window.setTimeout(() => controller.abort(), 9500) : null;
+  const timeoutId = controller ? window.setTimeout(() => controller.abort(), 12000) : null;
   try {
     const res = await fetch('/api/ai-analysis', {
       method: 'POST',
@@ -389,17 +460,22 @@ async function loadDashboard(forceRefresh = false, showRefreshState = false) {
     }
     if (requestId !== STATE.requestId) return;
 
-    // Render news immediately. AI is an optional second step and can never block the feed.
+    // Render the structure immediately. English source headlines are masked briefly while
+    // Gemini translates them; Arabic source headlines remain visible as-is.
+    STATE.aiPending = Boolean(payload?.meta?.ai?.enabled);
     render(payload);
     storageSet('strategicNewsroomCache', JSON.stringify(payload));
     setLastUpdated(new Date(payload.meta.updated_at || Date.now()));
 
     const aiUsed = await enhanceWithAI(payload, requestId);
     if (requestId !== STATE.requestId) return;
+    STATE.aiPending = false;
+    render(payload);
     storageSet('strategicNewsroomCache', JSON.stringify(payload));
-    setStatus(aiUsed ? 'جاهز — تم التحليل بالذكاء الاصطناعي' : 'جاهز');
+    setStatus(aiUsed ? 'جاهز — تم التعريب والتحليل بالذكاء الاصطناعي' : 'جاهز');
   } catch (e) {
     if (requestId !== STATE.requestId) return;
+    STATE.aiPending = false;
     const cached = storageGet('strategicNewsroomCache');
     if (cached) {
       try {
@@ -455,7 +531,7 @@ function setupActions() {
   document.getElementById('shareBtn').addEventListener('click', async () => {
     const hero = STATE.payload?.hero;
     const text = hero ? `مرصد الإمارات الذكي
-أهم حدث الآن: ${hero.title}
+أهم حدث الآن: ${displayTitle(hero)}
 الأهمية: ${hero.score}/100
 الثقة: ${hero.confidence}` : 'مرصد الإمارات الذكي';
     if (navigator.share) {

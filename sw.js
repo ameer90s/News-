@@ -1,8 +1,8 @@
-const CACHE = 'strategic-newsroom-v10';
+const CACHE = 'strategic-newsroom-v11';
 const ASSETS = [
   '/',
-  '/styles.css?v=10',
-  '/app.js?v=10',
+  '/styles.css?v=11',
+  '/app.js?v=11',
   '/icon.svg',
   '/background.webp',
   '/manifest.webmanifest',
