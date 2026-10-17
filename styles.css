@@ -48,22 +48,22 @@ body { min-height: 100vh; overflow-x: hidden; }
 
 .hero-panel { border-radius: 28px; padding: 20px; }
 
-/* Header top. Wide screens: title + UAE time on one row, description under them.
-   Phones: small UAE-time chip in the top-left corner, then the title at full width. */
+/* Header top: title (right) + small flag/time box (left) on one row,
+   one-line description under both. Same layout on phones and wide screens. */
 .hero-top {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas: "title corner" "sub sub";
   align-items: center;
-  column-gap: 14px;
-  row-gap: 6px;
+  column-gap: 10px;
+  row-gap: 4px;
 }
 .hero-title {
   grid-area: title;
   min-width: 0;
   margin: 0;
-  /* Scales with screen width so it always stays on ONE line (≈35px on a 412px phone) */
-  font-size: clamp(1.25rem, calc((100vw - 54px) / 9.6), 2.2rem);
+  /* Scales with screen width so it always stays on ONE line beside the time box (≈30px on a 412px phone) */
+  font-size: clamp(1.1rem, calc((100vw - 128px) / 9.6), 2.2rem);
   line-height: 1.3;
   white-space: nowrap;
   color: var(--accent);
@@ -73,28 +73,33 @@ body { min-height: 100vh; overflow-x: hidden; }
 }
 .subtitle {
   grid-area: sub;
-  margin: 0; max-width: 100%;
-  color: var(--muted); line-height: 1.6; font-size: .95rem; font-weight: 700;
-  overflow-wrap: break-word;
-  text-wrap: balance;
+  min-width: 0;
+  margin: 0;
+  /* ONE line across the full header width (≈12.6px on a 412px phone) */
+  font-size: clamp(.58rem, calc((100vw - 54px) / 28.3), .95rem);
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--muted); font-weight: 600;
   text-shadow: 0 3px 12px rgba(0,0,0,.88);
 }
 .hero-corner {
   grid-area: corner;
   justify-self: end;
-  display:flex; align-items:center; gap:7px;
-  padding:5px 11px; border-radius: 999px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+  padding:5px 9px; border-radius: 12px;
   background: rgba(5,18,30,0.28); border:1px solid rgba(155,220,255,.22);
   white-space: nowrap;
 }
 .uae-flag {
-  flex: none; display:block; width:22px; height:11px;
+  flex: none; display:block; width:24px; height:12px;
   border-radius: 2px; overflow: hidden;
   box-shadow: 0 0 0 1px rgba(255,255,255,.30), 0 2px 6px rgba(0,0,0,.45);
 }
-.corner-time-wrap { display:flex; align-items:baseline; gap:7px; line-height:1.25; }
-.corner-label { font-size: .72rem; color: #dce7f0; font-weight:700; text-shadow:0 2px 8px rgba(0,0,0,.8); }
-.corner-time { font-size: .86rem; font-weight:800; color:#fff; font-variant-numeric: tabular-nums; text-shadow:0 2px 9px rgba(0,0,0,.8); }
+.corner-time {
+  display:block; min-width:3.4em; text-align:center;
+  font-size: .95rem; line-height:1.2; font-weight:800; color:#fff;
+  font-variant-numeric: tabular-nums; text-shadow:0 2px 9px rgba(0,0,0,.8);
+}
 .eyebrow { font-size: .88rem; color: var(--accent); font-weight:800; text-shadow:0 2px 9px rgba(0,0,0,.8); }
 .eyebrow.green { color: var(--accent-2); }
 
@@ -134,7 +139,7 @@ body { min-height: 100vh; overflow-x: hidden; }
 .filters { display:flex; gap:8px; overflow:auto; margin-top:16px; }
 .filters::-webkit-scrollbar { display:none; }
 .chip { white-space: nowrap; border:1px solid var(--line); background: rgba(5,18,30,0.22); color:#edf6fb; padding:10px 14px; border-radius:999px; cursor:pointer; font-family:inherit; font-weight:700; }
-.chip.active { background: rgba(28, 73, 104, 0.72); color:#fff; }
+.chip.active { background: rgba(155, 231, 255, 0.22); border-color: rgba(155, 231, 255, 0.6); color:#fff; }
 
 .big-picture { border-radius: 28px; padding: 22px; margin-top:18px; display:grid; grid-template-columns: 1fr; gap:18px; }
 .big-left h2 { margin:8px 0; font-size: clamp(1.55rem, 5vw, 2.3rem); font-weight:800; text-shadow:0 4px 18px rgba(0,0,0,.92); }
@@ -193,13 +198,10 @@ body { min-height: 100vh; overflow-x: hidden; }
   .bg-layer { background-position: 52% 18%; }
   .shell { padding: 14px 10px 104px; }
   .hero-panel, .big-picture { border-radius: 24px; padding: 16px; }
-  .hero-top { grid-template-columns: minmax(0, 1fr); grid-template-areas: "corner" "title" "sub"; row-gap: 4px; }
-  .subtitle { font-size: clamp(.8rem, 3.6vw, .9rem); }
-  .hero-corner { padding:4px 9px; gap:6px; margin-bottom:2px; }
-  .uae-flag { width:20px; height:10px; }
-  .corner-time-wrap { gap:6px; }
-  .corner-label { font-size:.66rem; }
-  .corner-time { font-size:.8rem; }
+  .hero-top { column-gap: 8px; }
+  .hero-corner { padding:5px 7px; gap:3px; border-radius:11px; }
+  .uae-flag { width:22px; height:11px; }
+  .corner-time { font-size:.84rem; }
   .compact-btn { font-size:.78rem; padding:6px 10px; min-height:34px; }
   .compact-pill { font-size:.72rem; padding:5px 9px; }
   .breaking-wrap { flex-direction:column; align-items:stretch; }

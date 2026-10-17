@@ -54,8 +54,9 @@ function setLoading(isLoading) {
   label.textContent = isLoading ? 'جاري التحديث...' : 'تحديث';
 }
 
+// Live clock: 12:25 م (no seconds), refreshed every second so the minute flips on time.
 const clockFormatter = new Intl.DateTimeFormat(UAE_LOCALE, {
-  hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: UAE_TZ
+  hour: 'numeric', minute: '2-digit', hour12: true, timeZone: UAE_TZ
 });
 const shortTimeFormatter = new Intl.DateTimeFormat(UAE_LOCALE, {
   hour: 'numeric', minute: '2-digit', hour12: true, timeZone: UAE_TZ
@@ -82,18 +83,23 @@ function updateUAEClock() {
   if (el) el.textContent = formatUAETime();
 }
 
-// Safety net: keep the title on one line even with a different system font or text-size setting.
-function fitTitle() {
-  const el = document.getElementById('appTitle');
+// Safety net: keep the title and the description on ONE line, never cut,
+// even with a different system font or a bigger text-size setting on the phone.
+function fitOneLine(el, minPx) {
   if (!el) return;
   el.style.fontSize = '';
   let size = parseFloat(getComputedStyle(el).fontSize) || 16;
   let guard = 0;
-  while (el.scrollWidth > el.clientWidth + 1 && size > 12 && guard < 60) {
-    size -= 0.5;
+  while (el.scrollWidth > el.clientWidth + 1 && size > minPx && guard < 80) {
+    size -= 0.25;
     guard += 1;
     el.style.fontSize = `${size}px`;
   }
+}
+
+function fitTitle() {
+  fitOneLine(document.getElementById('appTitle'), 12);
+  fitOneLine(document.getElementById('appSubtitle'), 8);
 }
 
 function setupTitleFit() {

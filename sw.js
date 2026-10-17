@@ -1,8 +1,8 @@
-// v9 — the old precache list pointed to /static/... files that no longer exist in this
+// v10 — the old precache list pointed to /static/... files that no longer exist in this
 // flat build, so every new service worker failed to install and phones could stay on an
 // older cached version of the page. Paths below match the flat routes in app.py.
-const CACHE = 'uae-monitor-v9';
-const ASSETS = ['/', '/styles.css?v=9', '/app.js?v=9', '/icon.svg', '/background.webp', '/manifest.webmanifest'];
+const CACHE = 'uae-monitor-v10';
+const ASSETS = ['/', '/styles.css?v=10', '/app.js?v=10', '/icon.svg', '/background.webp', '/manifest.webmanifest'];
 self.addEventListener('install', (e) => {
   self.skipWaiting();
   // Cache each file on its own so one missing file can never block the update.
