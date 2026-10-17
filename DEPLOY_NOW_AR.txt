@@ -1,0 +1,7 @@
+نسخة اختبار Vercel بدون أي Environment Variables.
+
+1) ارفعي محتويات هذا المجلد كما هي.
+2) لا تضيفي OPENAI_API_KEY ولا DATABASE_URL الآن.
+3) Deploy.
+4) افتحي /api/health للتأكد أن الخدمة تعمل.
+5) بعد نجاح الاختبار يمكن إضافة PostgreSQL وOpenAI لاحقاً.

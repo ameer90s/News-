@@ -1,6 +1,4 @@
-fastapi>=0.121.0,<1.0.0
-uvicorn[standard]>=0.34.0,<1.0.0
+fastapi[standard]>=0.141.1,<1.0.0
 requests>=2.32.3,<3.0.0
-python-dotenv>=1.0.1,<2.0.0
-openai>=1.66.0,<3.0.0
+openai>=2.0.0,<3.0.0
 psycopg[binary]>=3.2.10,<4.0.0

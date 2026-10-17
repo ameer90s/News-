@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from math import exp, log2
 from typing import Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
 import os
 import re
@@ -101,7 +102,7 @@ def fetch_gdelt(topic: str, scope: str, hours: int = 24, maxrecords: int = 60) -
         "timespan": f"{max(1, int(hours))}H",
     }
     headers = {"User-Agent": "Strategic-Newsroom/1.0"}
-    timeout = int(os.getenv("REQUEST_TIMEOUT", "18"))
+    timeout = int(os.getenv("REQUEST_TIMEOUT", "8"))
     r = requests.get(GDELT_ENDPOINT, params=params, headers=headers, timeout=timeout)
     r.raise_for_status()
     rows = r.json().get("articles", []) or []
@@ -126,10 +127,14 @@ def fetch_gdelt(topic: str, scope: str, hours: int = 24, maxrecords: int = 60) -
 
 def fetch_matrix(hours: int = 24, maxrecords: int = 60) -> list[Article]:
     all_rows: list[Article] = []
-    for topic in TOPIC_QUERIES:
-        for scope in SCOPE_QUERIES:
+    jobs = [(topic, scope) for topic in TOPIC_QUERIES for scope in SCOPE_QUERIES]
+    # Run the nine GDELT queries concurrently so the first Vercel request does not
+    # spend the whole function duration waiting on sequential network calls.
+    with ThreadPoolExecutor(max_workers=min(6, len(jobs))) as pool:
+        futures = {pool.submit(fetch_gdelt, topic, scope, hours, maxrecords): (topic, scope) for topic, scope in jobs}
+        for future in as_completed(futures):
             try:
-                all_rows.extend(fetch_gdelt(topic, scope, hours, maxrecords))
+                all_rows.extend(future.result())
             except Exception:
                 continue
     by_url: dict[str, Article] = {}
