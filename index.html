@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=7" />
+  <link rel="stylesheet" href="/styles.css?v=11" />
 </head>
 <body>
   <div class="bg-layer"></div>
@@ -18,32 +18,29 @@
 
   <main class="shell">
     <header class="hero-panel glass">
-      <div class="header-brand-block">
-        <div class="brand-row">
-          <h1 id="appTitle" class="app-title">مرصد الإمارات الذكي</h1>
-
-          <div class="uae-clock-card" aria-label="الوقت الحالي في الإمارات">
-            <svg class="uae-flag" viewBox="0 0 28 18" role="img" aria-label="علم الإمارات العربية المتحدة">
-              <rect x="0" y="0" width="7" height="18" fill="#ff0000"></rect>
-              <rect x="7" y="0" width="21" height="6" fill="#009a49"></rect>
-              <rect x="7" y="6" width="21" height="6" fill="#ffffff"></rect>
-              <rect x="7" y="12" width="21" height="6" fill="#000000"></rect>
-            </svg>
-            <time id="dubaiClock" class="dubai-clock" datetime="">--:--</time>
-          </div>
+      <div class="hero-top">
+        <h1 id="appTitle" class="hero-title">مرصد الإمارات الذكي</h1>
+        <div class="hero-corner" role="group" aria-label="توقيت الإمارات">
+          <svg class="uae-flag" viewBox="0 0 12 6" aria-hidden="true" focusable="false">
+            <rect width="12" height="6" fill="#00732f"/>
+            <rect width="12" height="4" y="2" fill="#ffffff"/>
+            <rect width="12" height="2" y="4" fill="#000000"/>
+            <rect width="3" height="6" fill="#ff0000"/>
+          </svg>
+          <time id="uaeTime" class="corner-time">--:--</time>
         </div>
-
-        <p class="brand-description">متابعة ذكية لأهم الأخبار واتجاهاتها وتأثيرها المحتمل على الإمارات.</p>
+        <p id="appSubtitle" class="subtitle">متابعة ذكية لأهم الأخبار واتجاهاتها وتأثيرها المحتمل على الإمارات.</p>
       </div>
 
-      <div class="controls" aria-label="أدوات التحديث والمشاركة">
-        <button id="refreshBtn" class="btn primary" type="button">
+      <div class="mini-controls-row">
+        <button id="refreshBtn" type="button" class="btn primary compact-btn">
           <span class="btn-spinner" aria-hidden="true"></span>
-          <span class="refresh-label">تحديث</span>
+          <span class="btn-label">تحديث</span>
         </button>
-        <button id="shareBtn" class="btn" type="button">مشاركة</button>
-        <div class="last-update-pill">آخر تحديث: <time id="lastUpdatedTime" datetime="">—</time></div>
+        <button id="shareBtn" type="button" class="btn compact-btn">مشاركة</button>
+        <div class="info-pill compact-pill">آخر تحديث: <span id="lastUpdated">—</span></div>
       </div>
+
       <div id="refreshError" class="refresh-error" role="alert" hidden></div>
 
       <section class="breaking-wrap glass-soft" aria-label="آخر الأخبار الهامة">
@@ -62,26 +59,14 @@
 
     <section class="big-picture glass">
       <div class="big-left">
-        <div class="eyebrow green">BIG PICTURE BRIEF</div>
+        <div class="eyebrow green">ملخص الصورة الكبرى</div>
         <h2 id="heroTitle">جاري بناء الصورة الكبرى...</h2>
         <p id="heroText">سيظهر هنا أهم تحول عبر السياسة والاقتصاد والعسكري مع زاوية أوسع من مجرد عنوان سريع.</p>
       </div>
-      <div class="metrics">
-        <div class="metric-card">
-          <span class="metric-label">سياسي</span>
-          <b id="politicalRisk">—</b>
-          <small id="politicalImpact" class="metric-impact" hidden></small>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">اقتصادي</span>
-          <b id="economicRisk">—</b>
-          <small id="economicImpact" class="metric-impact" hidden></small>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">عسكري</span>
-          <b id="militaryRisk">—</b>
-          <small id="militaryImpact" class="metric-impact" hidden></small>
-        </div>
+      <div class="metrics metrics-inline">
+        <div class="metric-card political-card"><span class="metric-name">سياسي</span><b id="politicalRisk" class="metric-level">—</b><small id="politicalImpact" class="metric-impact" title="الأثر المحتمل على الإمارات">التأثير: —</small></div>
+        <div class="metric-card economic-card"><span class="metric-name">اقتصادي</span><b id="economicRisk" class="metric-level">—</b><small id="economicImpact" class="metric-impact" title="الأثر المحتمل على الإمارات">التأثير: —</small></div>
+        <div class="metric-card military-card"><span class="metric-name">عسكري</span><b id="militaryRisk" class="metric-level">—</b><small id="militaryImpact" class="metric-impact" title="الأثر المحتمل على الإمارات">التأثير: —</small></div>
       </div>
     </section>
 
@@ -119,6 +104,6 @@
   </nav>
 
   <div id="statusLive" class="sr-only" aria-live="polite">جاهز</div>
-  <script src="/app.js?v=7"></script>
+  <script src="/app.js?v=11"></script>
 </body>
 </html>

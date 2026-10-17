@@ -3,12 +3,17 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import time
 import os
 
 BASE_DIR = Path(__file__).resolve().parent
 app = FastAPI(title="Strategic Newsroom UAE")
 CACHE = {"hours": None, "payload": None, "updated_at": None}
+# Last payload that actually contained news, per time window: {hours: (fetched_at_epoch, payload)}
+GOOD = {}
+FRESH_SECONDS = 600        # /api/dashboard reuses news younger than 10 minutes
+MIN_REFRESH_SECONDS = 30   # /api/refresh within 30 s reuses the same result (protects the news sources)
 
 # ---- Flat-file frontend routes (all files live beside main.py) ----
 @app.get("/")
@@ -50,6 +55,7 @@ def health():
         "deployment": "vercel-mobile-flat",
         "variables_required": False,
         "updated_at": CACHE.get("updated_at"),
+        "last_sources": (CACHE.get("payload") or {}).get("meta", {}).get("sources"),
     }
 
 
@@ -59,29 +65,48 @@ def _news_engine(hours: int):
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from dataclasses import dataclass, asdict
     from difflib import SequenceMatcher
+    from email.utils import parsedate_to_datetime
+    from functools import lru_cache
     from math import exp, log2
     from urllib.parse import urlencode, urlparse
     from urllib.request import Request, urlopen
+    import xml.etree.ElementTree as ET
     import json
     import re
 
+    started = time.monotonic()
     hours = max(1, min(int(hours), 168))
-    endpoint = "https://api.gdeltproject.org/api/v2/doc/doc"
-
-    topic_queries = {
-        "political": '(government OR diplomacy OR election OR sanctions OR treaty OR parliament OR minister OR president OR "foreign policy" OR negotiations OR ceasefire OR summit)',
-        "economic": '(economy OR inflation OR "interest rate" OR GDP OR oil OR gas OR trade OR investment OR markets OR banking OR shipping OR currency OR tariff)',
-        "military": '(military OR defence OR defense OR missile OR drone OR airstrike OR army OR navy OR "air force" OR conflict OR ceasefire OR "security forces")',
+    now_utc = datetime.now(timezone.utc)
+    since = now_utc - timedelta(hours=hours)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; UAE-Smart-Monitor/2.2)",
+        "Accept": "application/rss+xml, application/xml;q=0.9, application/json;q=0.8, */*;q=0.5",
     }
-    scope_queries = {
-        "uae": '("United Arab Emirates" OR UAE OR "Abu Dhabi" OR Dubai OR Sharjah)',
-        "region": '("Middle East" OR GCC OR Gulf OR Saudi OR Qatar OR Kuwait OR Bahrain OR Oman OR Yemen OR Iraq OR Iran OR Israel OR Palestine OR Lebanon OR Syria OR Jordan OR Egypt OR Turkey)',
+    per_query = 30  # items kept per search (keeps clustering fast)
+
+    # ---- Source 1 (main): Google News RSS search — free, no key, no 5-second limit.
+    # Queries are short on purpose: Google ignores the tail of very long queries.
+    gn_topics = {
+        "political": '(diplomacy OR government OR minister OR president OR sanctions OR summit OR talks OR election)',
+        "economic": '(economy OR oil OR trade OR investment OR markets OR inflation OR tariff OR shipping)',
+        "military": '(military OR missile OR drone OR airstrike OR defense OR army OR navy OR attack)',
+    }
+    gn_scopes = {
+        "uae": '(UAE OR "United Arab Emirates" OR "Abu Dhabi" OR Dubai)',
+        "region": '("Middle East" OR Gulf OR Saudi OR Iran OR Israel OR Gaza OR Yemen OR Iraq)',
         "world": "",
     }
+    when = f"{hours}h" if hours <= 48 else f"{-(-hours // 24)}d"
+
+    # ---- Source 2 (fallback only): GDELT. It allows ONE request every 5 seconds per IP and
+    # blocks bursts, so the old 9-parallel-requests approach always came back empty.
+    gdelt_endpoint = "https://api.gdeltproject.org/api/v2/doc/doc"
+    gdelt_query = '("United Arab Emirates" OR UAE OR "Abu Dhabi" OR Dubai OR Gulf OR "Middle East" OR Saudi OR Iran OR Israel)'
+
     topic_labels = {"political": "سياسي", "economic": "اقتصادي", "military": "عسكري"}
     scope_labels = {"uae": "الإمارات", "region": "الشرق الأوسط", "world": "العالم"}
     source_weights = {
-        "wam.ae": 1.0, "reuters.com": 1.0, "apnews.com": 0.98, "bbc.com": 0.95,
+        "wam.ae": 1.0, "reuters.com": 1.0, "apnews.com": 0.98, "bbc.com": 0.95, "bbc.co.uk": 0.95,
         "ft.com": 0.95, "bloomberg.com": 0.95, "aljazeera.com": 0.92, "cnbc.com": 0.90,
         "cnn.com": 0.88, "france24.com": 0.88, "dw.com": 0.88, "thenationalnews.com": 0.88,
         "gulfnews.com": 0.84, "khaleejtimes.com": 0.82, "arabnews.com": 0.84,
@@ -92,6 +117,15 @@ def _news_engine(hours: int):
         "military": ["missile", "drone", "airstrike", "ceasefire", "navy", "air force", "attack", "conflict", "hormuz"],
     }
     uae_terms = ["uae", "united arab emirates", "abu dhabi", "dubai", "sharjah", "gcc", "gulf", "hormuz", "oil", "gas", "shipping", "airspace", "trade", "port", "aviation", "investment", "dirham"]
+
+    # Local classifiers (used for GDELT fallback articles, which come from one combined query)
+    topic_patterns = {
+        "political": re.compile(r"\b(diplomat\w*|government|minister\w*|president\w*|sanction\w*|summit|talks|election\w*|parliament|treaty|ceasefire|negotiat\w*|cabinet|foreign policy)\b", re.I),
+        "economic": re.compile(r"\b(econom\w*|oil|gas|trade|invest\w*|market\w*|inflation|tariff\w*|shipping|bank\w*|gdp|currency|stocks?|opec|energy)\b", re.I),
+        "military": re.compile(r"\b(military|missiles?|drones?|airstrikes?|defen[cs]e|army|navy|air force|attacks?|strikes?|troops|conflict|war)\b", re.I),
+    }
+    uae_pattern = re.compile(r"\b(uae|united arab emirates|emirati|abu dhabi|dubai|sharjah)\b", re.I)
+    region_pattern = re.compile(r"\b(middle east|gulf|gcc|saudi\w*|qatar\w*|kuwait\w*|bahrain\w*|oman\w*|yemen\w*|iraq\w*|iran\w*|israel\w*|gaza|palestin\w*|lebanon|syria\w*|jordan\w*|egypt\w*|turk\w*|houthis?|hormuz)\b", re.I)
 
     @dataclass
     class Article:
@@ -118,28 +152,73 @@ def _news_engine(hours: int):
             except ValueError: pass
         return datetime.now(timezone.utc)
 
-    def fetch_one(topic, scope):
-        query = f"{topic_queries[topic]} {scope_queries[scope]}".strip()
-        params = {"query": query, "mode": "ArtList", "maxrecords": 28, "format": "json", "sort": "HybridRel", "timespan": f"{hours}H"}
-        req = Request(f"{endpoint}?{urlencode(params)}", headers={"User-Agent":"Strategic-Newsroom/2.0"})
-        with urlopen(req, timeout=5) as r:
-            rows = (json.loads(r.read().decode("utf-8", errors="replace")).get("articles", []) or [])
+    def fmt_seen(dt):
+        return dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+    def fetch_google(topic, scope):
+        q = " ".join(x for x in (gn_topics[topic], gn_scopes[scope]) if x)
+        url = "https://news.google.com/rss/search?" + urlencode({"q": f"{q} when:{when}", "hl": "en-US", "gl": "US", "ceid": "US:en"})
+        with urlopen(Request(url, headers=headers), timeout=6) as r:
+            root = ET.fromstring(r.read())
+        out = []
+        for item in root.iter("item"):
+            title = re.sub(r"\s+", " ", (item.findtext("title") or "").strip())
+            link = (item.findtext("link") or "").strip()
+            src = item.find("source")
+            src_name = (src.text or "").strip() if src is not None and src.text else ""
+            src_url = src.get("url", "") if src is not None else ""
+            if src_name and title.endswith(f" - {src_name}"):
+                title = title[: -(len(src_name) + 3)].strip()
+            try:
+                dt = parsedate_to_datetime(item.findtext("pubDate") or "")
+                dt = dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+            except Exception:
+                dt = now_utc
+            if not title or not link or dt < since:
+                continue
+            out.append(Article(title, link, domain_of(src_url) or src_name.lower(), fmt_seen(dt), "", topic, scope))
+            if len(out) >= per_query:
+                break
+        return out
+
+    def fetch_gdelt_once(timeout):
+        params = {"query": gdelt_query, "mode": "ArtList", "maxrecords": 75, "format": "json", "sort": "HybridRel", "timespan": f"{hours}h"}
+        with urlopen(Request(f"{gdelt_endpoint}?{urlencode(params)}", headers=headers), timeout=timeout) as r:
+            text = r.read().decode("utf-8", errors="replace")
+        rows = (json.loads(text).get("articles", []) or [])  # a rate-limit reply is plain text -> raises -> caller ignores
         out, seen = [], set()
         for row in rows:
             url = str(row.get("url", "")).strip()
             title = re.sub(r"\s+", " ", str(row.get("title", "")).strip())
             if not url or not title or url in seen: continue
             seen.add(url)
-            out.append(Article(title, url, domain_of(url,row.get("domain")), str(row.get("seendate","")), str(row.get("sourcecountry","")), topic, scope))
+            topics = [t for t, p in topic_patterns.items() if p.search(title)]
+            if not topics: continue
+            scope = "uae" if uae_pattern.search(title) else ("region" if region_pattern.search(title) else "world")
+            out.append(Article(title, url, domain_of(url, row.get("domain")), str(row.get("seendate", "")), str(row.get("sourcecountry", "")), " | ".join(topics), scope))
         return out
 
-    rows = []
-    jobs = [(t,s) for t in topic_queries for s in scope_queries]
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        fs = [pool.submit(fetch_one,t,s) for t,s in jobs]
+    rows, source_counts, failed = [], {"google_news": 0, "gdelt": 0}, 0
+    jobs = [(t, s) for t in gn_topics for s in gn_scopes]
+    with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+        fs = [pool.submit(fetch_google, t, s) for t, s in jobs]
         for f in as_completed(fs):
-            try: rows.extend(f.result())
-            except Exception: pass
+            try:
+                got = f.result()
+                rows.extend(got)
+                source_counts["google_news"] += len(got)
+            except Exception:
+                failed += 1
+
+    if not rows:
+        remaining = 9.0 - (time.monotonic() - started)
+        if remaining > 1.5:
+            try:
+                got = fetch_gdelt_once(min(6.0, remaining))
+                rows.extend(got)
+                source_counts["gdelt"] = len(got)
+            except Exception:
+                failed += 1
 
     by_url = {}
     for a in rows:
@@ -147,13 +226,15 @@ def _news_engine(hours: int):
         else:
             old = by_url[a.url]
             if a.scope not in old.scope.split(" | "): old.scope += f" | {a.scope}"
-            if a.topic not in old.topic.split(" | "): old.topic += f" | {a.topic}"
+            for t in a.topic.split(" | "):
+                if t not in old.topic.split(" | "): old.topic += f" | {t}"
     articles = list(by_url.values())
 
+    @lru_cache(maxsize=4096)
     def normalize(title):
         text = title.lower()
         text = re.sub(r"https?://\S+", "", text)
-        text = re.sub(r"[^\w\u0600-\u06FF\s]", " ", text)
+        text = re.sub(r"[^\w؀-ۿ\s]", " ", text)
         text = re.sub(r"\s+", " ", text).strip()
         stop={"the","a","an","and","or","of","to","in","on","for","with","from","as","at","by","في","من","إلى","على","عن","مع","و","أو","بعد","قبل"}
         return " ".join(w for w in text.split() if w not in stop and len(w)>1)
@@ -209,18 +290,37 @@ def _news_engine(hours: int):
 
     analyses={t:analyze(t,events[t]) for t in topic_labels}
     all_events=sorted([e for lst in events.values() for e in lst],key=lambda x:x['score'],reverse=True)
-    return {"meta":{"updated_at":datetime.now(timezone.utc).isoformat(),"hours":hours,"article_count":len(articles),"database":"disabled-test-mode","analysis":"built-in"},"hero":all_events[0] if all_events else None,"top_events":all_events[:8],"events":events,"analyses":analyses}
+    meta = {
+        "updated_at": datetime.now(timezone.utc).isoformat(), "hours": hours, "article_count": len(articles),
+        "database": "disabled-test-mode", "analysis": "built-in",
+        "sources": source_counts, "failed_requests": failed, "took_seconds": round(time.monotonic() - started, 2),
+    }
+    return {"meta":meta,"hero":all_events[0] if all_events else None,"top_events":all_events[:8],"events":events,"analyses":analyses}
+
+
+def _get_news(hours: int, force: bool):
+    """Fetch news, reuse a recent good result, and never let an empty result replace good news."""
+    hours = max(1, min(int(hours), 168))
+    now = time.time()
+    good = GOOD.get(hours)
+    if good and now - good[0] < (MIN_REFRESH_SECONDS if force else FRESH_SECONDS):
+        return good[1]
+    payload = _news_engine(hours)
+    if payload["meta"].get("article_count", 0) > 0:
+        GOOD[hours] = (now, payload)
+        CACHE.update({"hours": hours, "payload": payload, "updated_at": payload["meta"]["updated_at"]})
+        return payload
+    if good:  # sources returned nothing right now -> keep showing the last good news for this window
+        stale = dict(good[1])
+        stale["meta"] = {**good[1]["meta"], "stale": True, "sources": payload["meta"].get("sources")}
+        return stale
+    return payload
 
 
 @app.get("/api/dashboard")
 def dashboard(hours: int = 24):
-    hours = max(1, min(int(hours), 168))
-    if CACHE.get("payload") and CACHE.get("hours") == hours:
-        return CACHE["payload"]
     try:
-        payload = _news_engine(hours)
-        CACHE.update({"hours": hours, "payload": payload, "updated_at": payload["meta"]["updated_at"]})
-        return payload
+        return _get_news(hours, force=False)
     except Exception as exc:
         if CACHE.get("payload"):
             return JSONResponse(CACHE["payload"])
@@ -229,8 +329,6 @@ def dashboard(hours: int = 24):
 @app.post("/api/refresh")
 def refresh(hours: int = 24):
     try:
-        payload = _news_engine(hours)
-        CACHE.update({"hours": hours, "payload": payload, "updated_at": payload["meta"]["updated_at"]})
-        return payload
+        return _get_news(hours, force=True)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"News refresh failed: {type(exc).__name__}")

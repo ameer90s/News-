@@ -1,7 +1,13 @@
 const STATE = {
   hours: 24,
   payload: null,
+  loading: false,
+  requestId: 0,
 };
+
+const CACHE_KEY = 'strategicNewsroomCache';
+const UAE_TZ = 'Asia/Dubai';
+const UAE_LOCALE = 'ar-AE-u-nu-latn'; // Arabic AM/PM marker (ص / م) with 0-9 digits, e.g. 12:25 م
 
 const topicMap = {
   political: { label: 'سياسي', riskId: 'politicalRisk', impactId: 'politicalImpact', analysisId: 'politicalAnalysis', eventsId: 'politicalEvents' },
@@ -9,145 +15,102 @@ const topicMap = {
   military: { label: 'عسكري', riskId: 'militaryRisk', impactId: 'militaryImpact', analysisId: 'militaryAnalysis', eventsId: 'militaryEvents' },
 };
 
-let refreshErrorTimer = null;
-
-window.addEventListener('beforeinstallprompt', (e) => e.preventDefault());
-
-function storageGet(key) {
-  try { return window.localStorage.getItem(key); } catch { return null; }
-}
-
-function storageSet(key, value) {
-  try { window.localStorage.setItem(key, value); } catch {}
-}
-
 function esc(v = '') {
   return String(v).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));
 }
 
-function setStatus(text) {
-  document.getElementById('statusLive').textContent = text;
+// Screen-reader announcement only (nothing visible under the buttons).
+function announce(text) {
+  const live = document.getElementById('statusLive');
+  if (live) live.textContent = text;
 }
 
-function formatDubaiTime(date = new Date()) {
-  try {
-    return new Intl.DateTimeFormat('ar-AE-u-nu-latn', {
-      timeZone: 'Asia/Dubai',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    }).format(date).replace(/\s+/g, ' ').trim();
-  } catch {
-    try {
-      return new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Dubai',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      }).format(date).replace(/AM/i, 'ص').replace(/PM/i, 'م');
-    } catch {
-      return '--:--';
-    }
+// Small, temporary error message — shown only when something fails.
+let errorTimer = null;
+function showError(text) {
+  const box = document.getElementById('refreshError');
+  if (!box) return;
+  box.textContent = text;
+  box.hidden = false;
+  clearTimeout(errorTimer);
+  errorTimer = setTimeout(clearError, 6000);
+}
+
+function clearError() {
+  const box = document.getElementById('refreshError');
+  if (!box) return;
+  clearTimeout(errorTimer);
+  box.hidden = true;
+  box.textContent = '';
+}
+
+function setLoading(isLoading) {
+  STATE.loading = isLoading;
+  const btn = document.getElementById('refreshBtn');
+  const label = btn.querySelector('.btn-label');
+  btn.classList.toggle('loading', isLoading);
+  btn.disabled = isLoading;
+  btn.setAttribute('aria-busy', String(isLoading));
+  label.textContent = isLoading ? 'جاري التحديث...' : 'تحديث';
+}
+
+// Live clock: 12:25 م (no seconds), refreshed every second so the minute flips on time.
+const clockFormatter = new Intl.DateTimeFormat(UAE_LOCALE, {
+  hour: 'numeric', minute: '2-digit', hour12: true, timeZone: UAE_TZ
+});
+const shortTimeFormatter = new Intl.DateTimeFormat(UAE_LOCALE, {
+  hour: 'numeric', minute: '2-digit', hour12: true, timeZone: UAE_TZ
+});
+const shortDateFormatter = new Intl.DateTimeFormat(UAE_LOCALE, { day: 'numeric', month: 'numeric', timeZone: UAE_TZ });
+const dayKeyFormatter = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: UAE_TZ });
+
+function formatUAETime(date = new Date()) {
+  return clockFormatter.format(date);
+}
+
+// "آخر تحديث": time only (12:25 م); adds day/month only if the data is from another day.
+function formatLastUpdated(isoString) {
+  if (!isoString) return '—';
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return '—';
+  const time = shortTimeFormatter.format(d);
+  if (dayKeyFormatter.format(d) === dayKeyFormatter.format(new Date())) return time;
+  return `${shortDateFormatter.format(d)} ${time}`;
+}
+
+function updateUAEClock() {
+  const el = document.getElementById('uaeTime');
+  if (el) el.textContent = formatUAETime();
+}
+
+// Safety net: keep the title and the description on ONE line, never cut,
+// even with a different system font or a bigger text-size setting on the phone.
+function fitOneLine(el, minPx) {
+  if (!el) return;
+  el.style.fontSize = '';
+  let size = parseFloat(getComputedStyle(el).fontSize) || 16;
+  let guard = 0;
+  while (el.scrollWidth > el.clientWidth + 1 && size > minPx && guard < 80) {
+    size -= 0.25;
+    guard += 1;
+    el.style.fontSize = `${size}px`;
   }
 }
 
-function updateDubaiClock() {
-  const clock = document.getElementById('dubaiClock');
-  if (!clock) return;
-  const now = new Date();
-  clock.textContent = formatDubaiTime(now);
-  clock.dateTime = now.toISOString();
+function fitTitle() {
+  fitOneLine(document.getElementById('appTitle'), 12);
+  fitOneLine(document.getElementById('appSubtitle'), 8);
 }
 
-function setLastUpdated(date = new Date(), persist = true) {
-  const el = document.getElementById('lastUpdatedTime');
-  if (!el) return;
-  el.textContent = formatDubaiTime(date);
-  el.dateTime = date.toISOString();
-  if (persist) storageSet('strategicNewsroomLastUpdatedAt', String(date.getTime()));
-}
-
-function restoreLastUpdated() {
-  const stored = Number(storageGet('strategicNewsroomLastUpdatedAt'));
-  if (Number.isFinite(stored) && stored > 0) setLastUpdated(new Date(stored), false);
-}
-
-function showTemporaryError(message) {
-  const errorBox = document.getElementById('refreshError');
-  if (!errorBox) return;
-  window.clearTimeout(refreshErrorTimer);
-  errorBox.textContent = message;
-  errorBox.hidden = false;
-  refreshErrorTimer = window.setTimeout(() => {
-    errorBox.hidden = true;
-    errorBox.textContent = '';
-  }, 4500);
-}
-
-function clearTemporaryError() {
-  const errorBox = document.getElementById('refreshError');
-  if (!errorBox) return;
-  window.clearTimeout(refreshErrorTimer);
-  errorBox.hidden = true;
-  errorBox.textContent = '';
-}
-
-function setRefreshLoading(isLoading) {
-  const btn = document.getElementById('refreshBtn');
-  if (!btn) return;
-  const label = btn.querySelector('.refresh-label');
-  btn.disabled = isLoading;
-  btn.classList.toggle('is-loading', isLoading);
-  btn.setAttribute('aria-busy', isLoading ? 'true' : 'false');
-  if (label) label.textContent = isLoading ? 'جاري التحديث...' : 'تحديث';
-}
-
-function fitHeaderTitle() {
-  const title = document.getElementById('appTitle');
-  const row = document.querySelector('.brand-row');
-  const clock = document.querySelector('.uae-clock-card');
-  if (!title || !row || !clock) return;
-
-  title.style.fontSize = '';
-  title.style.maxWidth = '';
-
-  requestAnimationFrame(() => {
-    const rowStyle = getComputedStyle(row);
-    const gap = parseFloat(rowStyle.columnGap || rowStyle.gap || '0') || 0;
-    const available = Math.max(0, row.clientWidth - clock.getBoundingClientRect().width - gap);
-    title.style.maxWidth = `${available}px`;
-
-    let size = parseFloat(getComputedStyle(title).fontSize) || 30;
-    let attempts = 0;
-    while (title.scrollWidth > available + 0.5 && size > 17 && attempts < 6) {
-      const ratio = available / Math.max(title.scrollWidth, 1);
-      size = Math.max(17, size * ratio * 0.985);
-      title.style.fontSize = `${size}px`;
-      attempts += 1;
-    }
-  });
-}
-
-function fitHeaderDescription() {
-  const description = document.querySelector('.brand-description');
-  if (!description) return;
-
-  description.style.transform = '';
-  description.style.transformOrigin = 'right center';
-
-  requestAnimationFrame(() => {
-    const available = description.clientWidth;
-    const needed = description.scrollWidth;
-    if (needed > available && available > 0) {
-      const scale = Math.max(0.94, available / needed);
-      description.style.transform = `scaleX(${scale})`;
-    }
-  });
-}
-
-function fitHeaderText() {
-  fitHeaderTitle();
-  fitHeaderDescription();
+function setupTitleFit() {
+  let frame = 0;
+  const schedule = () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(fitTitle);
+  };
+  fitTitle();
+  window.addEventListener('resize', schedule);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitle).catch(() => {});
 }
 
 function riskFromScore(score = 0) {
@@ -190,7 +153,7 @@ function eventCard(e) {
   const sources = (e.articles || []).map((a) => `
     <div class="source-item">
       <a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}</a>
-      <small>${esc(a.domain || '')} • ${esc(a.source_country || '')}</small>
+      <small>${[a.domain, a.source_country].filter(Boolean).map(esc).join(' • ')}</small>
     </div>`).join('');
 
   return `
@@ -243,19 +206,10 @@ function renderTopics(payload) {
   Object.entries(topicMap).forEach(([topic, meta]) => {
     const events = payload.events?.[topic] || [];
     const analysis = payload.analyses?.[topic] || {};
-    const topEvent = events.reduce((best, current) => {
-      return Number(current?.score || 0) > Number(best?.score || 0) ? current : best;
-    }, events[0] || {});
-
-    document.getElementById(meta.riskId).textContent = riskFromScore(topEvent.score || 0);
-
-    const impact = document.getElementById(meta.impactId);
-    const hasImpact = topEvent.uae_impact !== undefined && topEvent.uae_impact !== null && topEvent.uae_impact !== '';
-    if (impact) {
-      impact.hidden = !hasImpact;
-      impact.textContent = hasImpact ? `التأثير: ${topEvent.uae_impact}%` : '';
-    }
-
+    document.getElementById(meta.riskId).textContent = riskFromScore(events[0]?.score || 0);
+    const impact = events[0]?.uae_impact;
+    const impactEl = document.getElementById(meta.impactId);
+    if (impactEl) impactEl.textContent = (impact === undefined || impact === null || impact === '') ? 'التأثير: —' : `التأثير: ${impact}%`;
     document.getElementById(meta.analysisId).innerHTML = analysisHtml(analysis, `تحليل ${meta.label}`);
     document.getElementById(meta.eventsId).innerHTML = events.length ? events.map(eventCard).join('') : '<div class="empty">لا توجد نتائج كافية.</div>';
   });
@@ -266,38 +220,60 @@ function render(payload) {
   renderHome(payload);
   renderTopics(payload);
   renderBreaking(payload.top_events || []);
+  document.getElementById('lastUpdated').textContent = formatLastUpdated(payload.meta?.updated_at);
 }
 
-async function loadDashboard(forceRefresh = false, showRefreshState = false) {
-  setStatus(forceRefresh ? 'جاري التحديث والتحليل...' : 'جاري تحميل غرفة الأخبار...');
-  clearTemporaryError();
-  if (showRefreshState) setRefreshLoading(true);
+function readCache() {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+}
 
+async function loadDashboard(forceRefresh = false) {
+  // Only the latest request may update the screen or end the loading state.
+  const requestId = ++STATE.requestId;
+  setLoading(true);
+  clearError();
+  announce(forceRefresh ? 'جاري التحديث...' : 'جاري تحميل غرفة الأخبار...');
   const endpoint = forceRefresh ? `/api/refresh?hours=${STATE.hours}` : `/api/dashboard?hours=${STATE.hours}`;
   const method = forceRefresh ? 'POST' : 'GET';
-
   try {
     const res = await fetch(endpoint, { method });
     if (!res.ok) throw new Error('Network error');
     const payload = await res.json();
+    if (requestId !== STATE.requestId) return;
+    if (!Number(payload.meta?.article_count || 0)) {
+      // The news sources returned nothing right now: keep the last news on screen instead of blanking it.
+      const cached = readCache();
+      if (cached && Number(cached.meta?.article_count || 0) > 0) {
+        render(cached);
+        showError('لم تصل أخبار جديدة الآن — تُعرض آخر نسخة محفوظة');
+      } else {
+        render(payload);
+        showError('لم تصل أخبار من المصادر الآن، أعد المحاولة بعد دقيقة');
+      }
+      return;
+    }
     render(payload);
-    storageSet('strategicNewsroomCache', JSON.stringify(payload));
-    setLastUpdated(new Date());
-    setStatus('جاهز');
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(payload)); } catch {}
+    if (payload.meta?.stale) showError('تعذّر جلب أخبار جديدة الآن — تُعرض آخر نسخة');
+    announce('اكتمل التحديث');
   } catch (e) {
-    const cached = storageGet('strategicNewsroomCache');
+    if (requestId !== STATE.requestId) return;
+    const cached = readCache();
     if (cached) {
-      render(JSON.parse(cached));
-      setStatus('تعذر التحديث الآن — عرض آخر نسخة محفوظة');
-      showTemporaryError('تعذر التحديث الآن — تم عرض آخر نسخة محفوظة.');
+      render(cached);
+      showError('تعذّر التحديث الآن — تُعرض آخر نسخة محفوظة');
     } else {
-      setStatus('الخادم غير متاح الآن');
-      showTemporaryError('تعذر تحميل البيانات الآن. حاولي مرة أخرى بعد قليل.');
+      showError('تعذّر الاتصال بالخادم الآن');
       document.getElementById('topEvents').innerHTML = '<div class="empty">تعذر تحميل البيانات الآن. حاولي مرة أخرى بعد قليل.</div>';
       renderBreaking([]);
     }
   } finally {
-    if (showRefreshState) setRefreshLoading(false);
+    if (requestId === STATE.requestId) setLoading(false);
   }
 }
 
@@ -323,19 +299,19 @@ function setupFilters() {
       document.querySelectorAll('#hourFilters .chip').forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
       STATE.hours = Number(chip.dataset.hours);
-      loadDashboard(true, false);
+      loadDashboard(true);
     });
   });
 }
 
 function setupActions() {
-  document.getElementById('refreshBtn').addEventListener('click', () => loadDashboard(true, true));
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    if (STATE.loading) return; // no second press until the current request finishes
+    loadDashboard(true);
+  });
   document.getElementById('shareBtn').addEventListener('click', async () => {
     const hero = STATE.payload?.hero;
-    const text = hero ? `مرصد الإمارات الذكي
-أهم حدث الآن: ${hero.title}
-الأهمية: ${hero.score}/100
-الثقة: ${hero.confidence}` : 'مرصد الإمارات الذكي';
+    const text = hero ? `مرصد الإمارات الذكي\nأهم حدث الآن: ${hero.title}\nالأهمية: ${hero.score}/100\nالثقة: ${hero.confidence}` : 'مرصد الإمارات الذكي';
     if (navigator.share) {
       try { await navigator.share({ title: 'مرصد الإمارات الذكي', text, url: location.href }); } catch {}
     } else {
@@ -345,28 +321,14 @@ function setupActions() {
   });
 }
 
-function setupHeader() {
-  updateDubaiClock();
-  window.setInterval(updateDubaiClock, 1000);
-  restoreLastUpdated();
-  fitHeaderText();
-
-  window.addEventListener('resize', fitHeaderText, { passive: true });
-  if (document.fonts?.ready) document.fonts.ready.then(fitHeaderText).catch(() => {});
-}
-
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-
-// Core dashboard boot must not depend on optional header enhancements.
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
+// No in-page install UI: also stop the browser's automatic install mini-bar from appearing.
+window.addEventListener('beforeinstallprompt', (e) => e.preventDefault());
+updateUAEClock();
+setInterval(updateUAEClock, 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) updateUAEClock(); });
+setupTitleFit();
 setupTabs();
 setupFilters();
 setupActions();
-loadDashboard(false, false);
-
-try {
-  setupHeader();
-} catch (error) {
-  // Keep the news dashboard running even if a device blocks an optional
-  // browser feature used only by the clock/header.
-  console.warn('Header enhancement skipped:', error);
-}
+loadDashboard(false);
