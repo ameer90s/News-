@@ -1,7 +1,6 @@
 const STATE = {
   hours: 24,
   payload: null,
-  deferredPrompt: null,
 };
 
 const topicMap = {
@@ -25,7 +24,7 @@ function setLoading(isLoading) {
   const label = btn.querySelector('.btn-label');
   btn.classList.toggle('loading', isLoading);
   btn.disabled = isLoading;
-  label.textContent = isLoading ? 'جاري التحديث...' : 'تحديث وتحليل';
+  label.textContent = isLoading ? 'جاري التحديث...' : 'تحديث';
 }
 
 function formatUAETime(date = new Date()) {
@@ -157,7 +156,7 @@ function render(payload) {
 
 async function loadDashboard(forceRefresh = false) {
   setLoading(true);
-  setStatus(forceRefresh ? 'جاري التحديث والتحليل...' : 'جاري تحميل غرفة الأخبار...');
+  setStatus(forceRefresh ? 'جاري التحديث...' : 'جاري تحميل غرفة الأخبار...');
   const endpoint = forceRefresh ? `/api/refresh?hours=${STATE.hours}` : `/api/dashboard?hours=${STATE.hours}`;
   const method = forceRefresh ? 'POST' : 'GET';
   try {
@@ -220,29 +219,6 @@ function setupActions() {
       await navigator.clipboard.writeText(text);
       alert('تم نسخ الملخص');
     }
-  });
-
-  const installBtn = document.getElementById('installBtn');
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    STATE.deferredPrompt = e;
-    installBtn.classList.remove('hidden');
-  });
-
-  installBtn.addEventListener('click', async () => {
-    if (!STATE.deferredPrompt) {
-      alert('إذا لم يظهر خيار التثبيت، افتحي قائمة المتصفح واختاري: Add to Home Screen');
-      return;
-    }
-    STATE.deferredPrompt.prompt();
-    await STATE.deferredPrompt.userChoice.catch(() => null);
-    STATE.deferredPrompt = null;
-    installBtn.classList.add('hidden');
-  });
-
-  window.addEventListener('appinstalled', () => {
-    installBtn.classList.add('hidden');
-    setStatus('تم تثبيت التطبيق على الهاتف');
   });
 }
 

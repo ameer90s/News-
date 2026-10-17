@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=6" />
+  <link rel="stylesheet" href="/styles.css?v=7" />
 </head>
 <body>
   <div class="bg-layer"></div>
@@ -18,30 +18,30 @@
 
   <main class="shell">
     <header class="hero-panel glass">
-      <div class="brand-row">
-        <div class="brand-copy">
-          <div class="eyebrow">مرصد الإمارات الذكي</div>
-          <h1>مرصد الإمارات الذكي</h1>
+      <div class="hero-topbar">
+        <div class="hero-title-wrap">
+          <div class="eyebrow hero-title">مرصد الإمارات الذكي</div>
           <p class="subtitle">نبذة ذكية ترصد أهم الأخبار واتجاهاتها وتأثيرها المحتمل على الإمارات.</p>
         </div>
-        <div class="brand-badge">🇦🇪</div>
+        <div class="hero-corner">
+          <div class="corner-flag">🇦🇪</div>
+          <div class="corner-time-wrap">
+            <div class="corner-label">توقيت الإمارات</div>
+            <div id="uaeTime" class="corner-time">--:--</div>
+          </div>
+        </div>
       </div>
 
-      <div class="top-info-row">
-        <div class="info-pill time-pill">🕒 توقيت الإمارات: <span id="uaeTime">--:--</span></div>
-        <div class="info-pill update-pill">آخر تحديث: <span id="lastUpdated">—</span></div>
-      </div>
-
-      <div class="controls">
-        <button id="refreshBtn" class="btn primary">
+      <div class="mini-controls-row">
+        <button id="refreshBtn" class="btn primary compact-btn">
           <span class="btn-spinner" aria-hidden="true"></span>
-          <span class="btn-label">تحديث وتحليل</span>
+          <span class="btn-label">تحديث</span>
         </button>
-        <button id="shareBtn" class="btn">مشاركة</button>
-        <button id="installBtn" class="btn install-btn hidden">📲 تثبيت التطبيق</button>
+        <button id="shareBtn" class="btn compact-btn">مشاركة</button>
+        <div class="info-pill compact-pill">آخر تحديث: <span id="lastUpdated">—</span></div>
       </div>
 
-      <div id="progressHint" class="progress-hint">اضغطي تحديث وتحليل وسيظهر دوران أثناء جلب الأخبار.</div>
+      <div id="progressHint" class="progress-hint">اضغطي تحديث وسيظهر المؤشر أثناء جلب الأخبار.</div>
 
       <section class="breaking-wrap glass-soft" aria-label="آخر الأخبار الهامة">
         <div class="breaking-label">آخر الأخبار الهامة</div>
@@ -104,6 +104,6 @@
   </nav>
 
   <div id="statusLive" class="sr-only" aria-live="polite">جاهز</div>
-  <script src="/app.js?v=6"></script>
+  <script src="/app.js?v=7"></script>
 </body>
 </html>
