@@ -1,8 +1,12 @@
-const CACHE = 'strategic-newsroom-v4';
-const ASSETS = ['/', '/static/styles.css?v=2', '/static/app.js?v=2', '/static/icon.svg', '/static/background.webp?v=2', '/static/manifest.webmanifest'];
+// v9 — the old precache list pointed to /static/... files that no longer exist in this
+// flat build, so every new service worker failed to install and phones could stay on an
+// older cached version of the page. Paths below match the flat routes in app.py.
+const CACHE = 'uae-monitor-v9';
+const ASSETS = ['/', '/styles.css?v=9', '/app.js?v=9', '/icon.svg', '/background.webp', '/manifest.webmanifest'];
 self.addEventListener('install', (e) => {
   self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
+  // Cache each file on its own so one missing file can never block the update.
+  e.waitUntil(caches.open(CACHE).then((cache) => Promise.all(ASSETS.map((url) => cache.add(url).catch(() => null)))));
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(Promise.all([
@@ -11,11 +15,14 @@ self.addEventListener('activate', (e) => {
   ]));
 });
 self.addEventListener('fetch', (e) => {
+  if (e.request.method !== 'GET') return;
   if (e.request.url.includes('/api/')) return;
   // Network-first so visual updates are not stuck behind an old cached theme/background.
   e.respondWith(fetch(e.request).then((response) => {
-    const copy = response.clone();
-    caches.open(CACHE).then(cache => cache.put(e.request, copy));
+    if (response && (response.ok || response.type === 'opaque')) {
+      const copy = response.clone();
+      caches.open(CACHE).then(cache => cache.put(e.request, copy));
+    }
     return response;
-  }).catch(() => caches.match(e.request)));
+  }).catch(() => caches.match(e.request).then((hit) => hit || (e.request.mode === 'navigate' ? caches.match('/') : undefined))));
 });

@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=7" />
+  <link rel="stylesheet" href="/styles.css?v=9" />
 </head>
 <body>
   <div class="bg-layer"></div>
@@ -18,30 +18,33 @@
 
   <main class="shell">
     <header class="hero-panel glass">
-      <div class="hero-topbar">
-        <div class="hero-title-wrap">
-          <div class="eyebrow hero-title">مرصد الإمارات الذكي</div>
-          <p class="subtitle">نبذة ذكية ترصد أهم الأخبار واتجاهاتها وتأثيرها المحتمل على الإمارات.</p>
-        </div>
-        <div class="hero-corner">
-          <div class="corner-flag">🇦🇪</div>
+      <div class="hero-top">
+        <h1 id="appTitle" class="hero-title">مرصد الإمارات الذكي</h1>
+        <div class="hero-corner" role="group" aria-label="توقيت الإمارات">
+          <svg class="uae-flag" viewBox="0 0 12 6" aria-hidden="true" focusable="false">
+            <rect width="12" height="6" fill="#00732f"/>
+            <rect width="12" height="4" y="2" fill="#ffffff"/>
+            <rect width="12" height="2" y="4" fill="#000000"/>
+            <rect width="3" height="6" fill="#ff0000"/>
+          </svg>
           <div class="corner-time-wrap">
-            <div class="corner-label">توقيت الإمارات</div>
-            <div id="uaeTime" class="corner-time">--:--</div>
+            <span class="corner-label">توقيت الإمارات</span>
+            <time id="uaeTime" class="corner-time">--:--</time>
           </div>
         </div>
+        <p class="subtitle">متابعة ذكية لأهم الأخبار واتجاهاتها وتأثيرها المحتمل على الإمارات.</p>
       </div>
 
       <div class="mini-controls-row">
-        <button id="refreshBtn" class="btn primary compact-btn">
+        <button id="refreshBtn" type="button" class="btn primary compact-btn">
           <span class="btn-spinner" aria-hidden="true"></span>
           <span class="btn-label">تحديث</span>
         </button>
-        <button id="shareBtn" class="btn compact-btn">مشاركة</button>
+        <button id="shareBtn" type="button" class="btn compact-btn">مشاركة</button>
         <div class="info-pill compact-pill">آخر تحديث: <span id="lastUpdated">—</span></div>
       </div>
 
-      <div id="progressHint" class="progress-hint">اضغطي تحديث وسيظهر المؤشر أثناء جلب الأخبار.</div>
+      <div id="refreshError" class="refresh-error" role="alert" hidden></div>
 
       <section class="breaking-wrap glass-soft" aria-label="آخر الأخبار الهامة">
         <div class="breaking-label">آخر الأخبار الهامة</div>
@@ -64,9 +67,9 @@
         <p id="heroText">سيظهر هنا أهم تحول عبر السياسة والاقتصاد والعسكري مع زاوية أوسع من مجرد عنوان سريع.</p>
       </div>
       <div class="metrics metrics-inline">
-        <div class="metric-card political-card"><b id="politicalRisk">—</b><span>سياسي</span></div>
-        <div class="metric-card economic-card"><b id="economicRisk">—</b><span>اقتصادي</span></div>
-        <div class="metric-card military-card"><b id="militaryRisk">—</b><span>عسكري</span></div>
+        <div class="metric-card political-card"><span class="metric-name">سياسي</span><b id="politicalRisk" class="metric-level">—</b><small id="politicalImpact" class="metric-impact" title="الأثر المحتمل على الإمارات">التأثير: —</small></div>
+        <div class="metric-card economic-card"><span class="metric-name">اقتصادي</span><b id="economicRisk" class="metric-level">—</b><small id="economicImpact" class="metric-impact" title="الأثر المحتمل على الإمارات">التأثير: —</small></div>
+        <div class="metric-card military-card"><span class="metric-name">عسكري</span><b id="militaryRisk" class="metric-level">—</b><small id="militaryImpact" class="metric-impact" title="الأثر المحتمل على الإمارات">التأثير: —</small></div>
       </div>
     </section>
 
@@ -104,6 +107,6 @@
   </nav>
 
   <div id="statusLive" class="sr-only" aria-live="polite">جاهز</div>
-  <script src="/app.js?v=7"></script>
+  <script src="/app.js?v=9"></script>
 </body>
 </html>

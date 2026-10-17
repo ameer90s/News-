@@ -1,50 +1,110 @@
 const STATE = {
   hours: 24,
   payload: null,
+  loading: false,
+  requestId: 0,
 };
 
+const CACHE_KEY = 'strategicNewsroomCache';
+const UAE_TZ = 'Asia/Dubai';
+const UAE_LOCALE = 'ar-AE-u-nu-latn'; // Arabic AM/PM marker (ص / م) with 0-9 digits, e.g. 12:25 م
+
 const topicMap = {
-  political: { label: 'سياسي', riskId: 'politicalRisk', analysisId: 'politicalAnalysis', eventsId: 'politicalEvents' },
-  economic: { label: 'اقتصادي', riskId: 'economicRisk', analysisId: 'economicAnalysis', eventsId: 'economicEvents' },
-  military: { label: 'عسكري', riskId: 'militaryRisk', analysisId: 'militaryAnalysis', eventsId: 'militaryEvents' },
+  political: { label: 'سياسي', riskId: 'politicalRisk', impactId: 'politicalImpact', analysisId: 'politicalAnalysis', eventsId: 'politicalEvents' },
+  economic: { label: 'اقتصادي', riskId: 'economicRisk', impactId: 'economicImpact', analysisId: 'economicAnalysis', eventsId: 'economicEvents' },
+  military: { label: 'عسكري', riskId: 'militaryRisk', impactId: 'militaryImpact', analysisId: 'militaryAnalysis', eventsId: 'militaryEvents' },
 };
 
 function esc(v = '') {
   return String(v).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));
 }
 
-function setStatus(text) {
-  document.getElementById('statusLive').textContent = text;
-  const hint = document.getElementById('progressHint');
-  if (hint) hint.textContent = text;
+// Screen-reader announcement only (nothing visible under the buttons).
+function announce(text) {
+  const live = document.getElementById('statusLive');
+  if (live) live.textContent = text;
+}
+
+// Small, temporary error message — shown only when something fails.
+let errorTimer = null;
+function showError(text) {
+  const box = document.getElementById('refreshError');
+  if (!box) return;
+  box.textContent = text;
+  box.hidden = false;
+  clearTimeout(errorTimer);
+  errorTimer = setTimeout(clearError, 6000);
+}
+
+function clearError() {
+  const box = document.getElementById('refreshError');
+  if (!box) return;
+  clearTimeout(errorTimer);
+  box.hidden = true;
+  box.textContent = '';
 }
 
 function setLoading(isLoading) {
+  STATE.loading = isLoading;
   const btn = document.getElementById('refreshBtn');
   const label = btn.querySelector('.btn-label');
   btn.classList.toggle('loading', isLoading);
   btn.disabled = isLoading;
+  btn.setAttribute('aria-busy', String(isLoading));
   label.textContent = isLoading ? 'جاري التحديث...' : 'تحديث';
 }
 
+const clockFormatter = new Intl.DateTimeFormat(UAE_LOCALE, {
+  hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: UAE_TZ
+});
+const shortTimeFormatter = new Intl.DateTimeFormat(UAE_LOCALE, {
+  hour: 'numeric', minute: '2-digit', hour12: true, timeZone: UAE_TZ
+});
+const shortDateFormatter = new Intl.DateTimeFormat(UAE_LOCALE, { day: 'numeric', month: 'numeric', timeZone: UAE_TZ });
+const dayKeyFormatter = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: UAE_TZ });
+
 function formatUAETime(date = new Date()) {
-  return new Intl.DateTimeFormat('ar-AE', {
-    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Dubai'
-  }).format(date);
+  return clockFormatter.format(date);
 }
 
-function formatUAEDateTime(isoString) {
+// "آخر تحديث": time only (12:25 م); adds day/month only if the data is from another day.
+function formatLastUpdated(isoString) {
   if (!isoString) return '—';
   const d = new Date(isoString);
   if (Number.isNaN(d.getTime())) return '—';
-  return new Intl.DateTimeFormat('ar-AE', {
-    timeZone: 'Asia/Dubai', day: '2-digit', month: '2-digit', hour: 'numeric', minute: '2-digit', hour12: true
-  }).format(d);
+  const time = shortTimeFormatter.format(d);
+  if (dayKeyFormatter.format(d) === dayKeyFormatter.format(new Date())) return time;
+  return `${shortDateFormatter.format(d)} ${time}`;
 }
 
 function updateUAEClock() {
   const el = document.getElementById('uaeTime');
   if (el) el.textContent = formatUAETime();
+}
+
+// Safety net: keep the title on one line even with a different system font or text-size setting.
+function fitTitle() {
+  const el = document.getElementById('appTitle');
+  if (!el) return;
+  el.style.fontSize = '';
+  let size = parseFloat(getComputedStyle(el).fontSize) || 16;
+  let guard = 0;
+  while (el.scrollWidth > el.clientWidth + 1 && size > 12 && guard < 60) {
+    size -= 0.5;
+    guard += 1;
+    el.style.fontSize = `${size}px`;
+  }
+}
+
+function setupTitleFit() {
+  let frame = 0;
+  const schedule = () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(fitTitle);
+  };
+  fitTitle();
+  window.addEventListener('resize', schedule);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitle).catch(() => {});
 }
 
 function riskFromScore(score = 0) {
@@ -141,6 +201,9 @@ function renderTopics(payload) {
     const events = payload.events?.[topic] || [];
     const analysis = payload.analyses?.[topic] || {};
     document.getElementById(meta.riskId).textContent = riskFromScore(events[0]?.score || 0);
+    const impact = events[0]?.uae_impact;
+    const impactEl = document.getElementById(meta.impactId);
+    if (impactEl) impactEl.textContent = (impact === undefined || impact === null || impact === '') ? 'التأثير: —' : `التأثير: ${impact}%`;
     document.getElementById(meta.analysisId).innerHTML = analysisHtml(analysis, `تحليل ${meta.label}`);
     document.getElementById(meta.eventsId).innerHTML = events.length ? events.map(eventCard).join('') : '<div class="empty">لا توجد نتائج كافية.</div>';
   });
@@ -151,33 +214,47 @@ function render(payload) {
   renderHome(payload);
   renderTopics(payload);
   renderBreaking(payload.top_events || []);
-  document.getElementById('lastUpdated').textContent = formatUAEDateTime(payload.meta?.updated_at);
+  document.getElementById('lastUpdated').textContent = formatLastUpdated(payload.meta?.updated_at);
+}
+
+function readCache() {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function loadDashboard(forceRefresh = false) {
+  // Only the latest request may update the screen or end the loading state.
+  const requestId = ++STATE.requestId;
   setLoading(true);
-  setStatus(forceRefresh ? 'جاري التحديث...' : 'جاري تحميل غرفة الأخبار...');
+  clearError();
+  announce(forceRefresh ? 'جاري التحديث...' : 'جاري تحميل غرفة الأخبار...');
   const endpoint = forceRefresh ? `/api/refresh?hours=${STATE.hours}` : `/api/dashboard?hours=${STATE.hours}`;
   const method = forceRefresh ? 'POST' : 'GET';
   try {
     const res = await fetch(endpoint, { method });
     if (!res.ok) throw new Error('Network error');
     const payload = await res.json();
+    if (requestId !== STATE.requestId) return;
     render(payload);
-    localStorage.setItem('strategicNewsroomCache', JSON.stringify(payload));
-    setStatus(`تم التحديث بنجاح • ${payload.meta?.article_count || 0} مادة تقريبًا`);
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(payload)); } catch {}
+    announce('اكتمل التحديث');
   } catch (e) {
-    const cached = localStorage.getItem('strategicNewsroomCache');
+    if (requestId !== STATE.requestId) return;
+    const cached = readCache();
     if (cached) {
-      render(JSON.parse(cached));
-      setStatus('تعذر التحديث الآن — عرض آخر نسخة محفوظة');
+      render(cached);
+      showError('تعذّر التحديث الآن — تُعرض آخر نسخة محفوظة');
     } else {
-      setStatus('الخادم غير متاح الآن');
+      showError('تعذّر الاتصال بالخادم الآن');
       document.getElementById('topEvents').innerHTML = '<div class="empty">تعذر تحميل البيانات الآن. حاولي مرة أخرى بعد قليل.</div>';
       renderBreaking([]);
     }
   } finally {
-    setLoading(false);
+    if (requestId === STATE.requestId) setLoading(false);
   }
 }
 
@@ -209,7 +286,10 @@ function setupFilters() {
 }
 
 function setupActions() {
-  document.getElementById('refreshBtn').addEventListener('click', () => loadDashboard(true));
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    if (STATE.loading) return; // no second press until the current request finishes
+    loadDashboard(true);
+  });
   document.getElementById('shareBtn').addEventListener('click', async () => {
     const hero = STATE.payload?.hero;
     const text = hero ? `مرصد الإمارات الذكي\nأهم حدث الآن: ${hero.title}\nالأهمية: ${hero.score}/100\nالثقة: ${hero.confidence}` : 'مرصد الإمارات الذكي';
@@ -222,9 +302,13 @@ function setupActions() {
   });
 }
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
+// No in-page install UI: also stop the browser's automatic install mini-bar from appearing.
+window.addEventListener('beforeinstallprompt', (e) => e.preventDefault());
 updateUAEClock();
 setInterval(updateUAEClock, 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) updateUAEClock(); });
+setupTitleFit();
 setupTabs();
 setupFilters();
 setupActions();
