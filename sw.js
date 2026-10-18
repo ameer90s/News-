@@ -1,5 +1,5 @@
-const CACHE = 'uae-smart-observatory-v1';
-const SHELL = ['/', '/assets/styles.css?v=1', '/assets/app.js?v=1', '/assets/background.svg?v=1', '/assets/uae-flag.svg?v=1'];
+const CACHE = 'uae-smart-observatory-v2';
+const SHELL = ['/', '/styles.css?v=2', '/app.js?v=2', '/background.svg?v=2', '/uae-flag.svg?v=2'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).catch(() => null));

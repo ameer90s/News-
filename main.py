@@ -16,15 +16,10 @@ from urllib.parse import quote_plus, urlparse
 import httpx
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 BASE_DIR = Path(__file__).resolve().parent
-ASSETS_DIR = BASE_DIR / "assets"
-
 app = FastAPI(title="مرصد الإمارات الذكي", docs_url=None, redoc_url=None)
-app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
-
 
 @app.middleware("http")
 async def cache_policy(request, call_next):
@@ -393,9 +388,34 @@ async def manifest():
     return FileResponse(BASE_DIR / "manifest.webmanifest", media_type="application/manifest+json")
 
 
+@app.get("/styles.css")
+async def styles_css():
+    return FileResponse(BASE_DIR / "styles.css", media_type="text/css", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/app.js")
+async def app_js():
+    return FileResponse(BASE_DIR / "app.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/background.svg")
+async def background_svg():
+    return FileResponse(BASE_DIR / "background.svg", media_type="image/svg+xml")
+
+
+@app.get("/uae-flag.svg")
+async def uae_flag_svg():
+    return FileResponse(BASE_DIR / "uae-flag.svg", media_type="image/svg+xml")
+
+
+@app.get("/favicon.svg")
+async def favicon_svg():
+    return FileResponse(BASE_DIR / "favicon.svg", media_type="image/svg+xml")
+
+
 @app.get("/favicon.ico")
 async def favicon():
-    path = ASSETS_DIR / "favicon.svg"
+    path = BASE_DIR / "favicon.svg"
     if path.exists():
         return FileResponse(path, media_type="image/svg+xml")
     return Response(status_code=204)
