@@ -1,16 +1,23 @@
-# مرصد الإمارات الذكي — Fresh Build
-هذا المشروع بُني من الصفر ولا يعتمد على أي إصدار سابق.
+# مرصد الإمارات الذكي — Fresh Rebuild
 
-## Vercel
-1. ارفع محتويات المجلد إلى GitHub.
-2. اربط المستودع بـ Vercel.
-3. أضف Environment Variable باسم `GEMINI_API_KEY`.
-4. اختياري: `GEMINI_MODEL` (الافتراضي في الكود: `gemini-2.5-flash`).
-5. Deploy.
+هذا المشروع بُني من الصفر ولا يعتمد على أي نسخة سابقة.
 
-## السلوك
-- الأخبار العربية تُجلب من Google News Arabic UAE RSS، ولا تُعرض العناوين غير العربية.
+## الرفع على Vercel
+1. ارفع **محتويات هذا المجلد إلى جذر GitHub مباشرة**. يجب أن يظهر `app.py` و`requirements.txt` في جذر المستودع.
+2. اربط المستودع بـ Vercel. لا تضف `vercel.json`؛ Vercel يدعم FastAPI تلقائياً.
+3. في Vercel → Project Settings → Environment Variables أضف:
+   - `GEMINI_API_KEY` = مفتاح Gemini من Google AI Studio.
+   - اختياري: `GEMINI_MODEL` = `gemini-3.8-flash`.
+4. أعد Deploy.
+
+## فحص سريع بعد النشر
+- `/` يجب أن يفتح الواجهة.
+- `/api/health` يجب أن يعيد JSON وفيه `"ok": true`.
+- `/api/news?hours=24` يجب أن يعيد JSON للأخبار (قد تختلف النتائج حسب توفر مصادر الأخبار).
+
+## ملاحظات
 - الأخبار تظهر قبل تحليل Gemini.
-- إذا فشل Gemini يبقى الموقع والأخبار يعملان مع تحليل محلي fallback.
-- API routes غير مخزنة في Service Worker.
-- لا يوجد زر Install ويتم منع beforeinstallprompt.
+- إذا فشل Gemini، يبقى المرصد والأخبار يعملان ويظهر تحليل محلي بدون شارة AI.
+- الواجهة لا تعرض عنوان خبر إنجليزي؛ الأخبار غير العربية تُستبعد من الواجهة.
+- `sw.js` لا يخزن `/api/` في الكاش.
+- لا يوجد زر تثبيت، ويتم منع `beforeinstallprompt` في الواجهة.

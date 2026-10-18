@@ -1,1 +1,11 @@
-{"name":"مرصد الإمارات الذكي","short_name":"المرصد","start_url":"/","display":"standalone","background_color":"#03101f","theme_color":"#06192b","lang":"ar","dir":"rtl"}
+{
+  "name": "مرصد الإمارات الذكي",
+  "short_name": "مرصد الإمارات",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#04111f",
+  "theme_color": "#061523",
+  "icons": []
+}

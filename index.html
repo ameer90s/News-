@@ -1,21 +1,131 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#06192b"><title>مرصد الإمارات الذكي</title><link rel="manifest" href="/static/manifest.webmanifest"><link rel="stylesheet" href="/static/styles.css?v=1.0.0"></head><body>
-<div class="app">
-<header class="hero glass">
-  <div class="top"><h1 id="title">مرصد الإمارات الذكي</h1><div class="clock"><svg viewBox="0 0 48 32" aria-label="علم الإمارات"><rect width="48" height="32" fill="#fff"/><rect width="36" height="10.67" x="12" fill="#009A49"/><rect width="36" height="10.67" x="12" y="21.33" fill="#000"/><rect width="12" height="32" fill="#EF3340"/></svg><b id="uaeTime">--:--</b></div></div>
-  <p class="tagline">متابعة ذكية لأهم الأخبار واتجاهاتها وتأثيرها المحتمل على الإمارات.</p>
-  <div class="actions"><button id="refresh">↻ <span>تحديث</span></button><button id="share">⌯ مشاركة</button><span class="updated">آخر تحديث: <b id="lastUpdate">--:--</b></span></div>
-  <div class="hours" id="hours"><button data-h="6">6 ساعات</button><button data-h="12">12 ساعة</button><button class="active" data-h="24">24 ساعة</button><button data-h="48">48 ساعة</button><button data-h="72">72 ساعة</button></div>
-</header>
-<main>
-<section class="glass big"><div class="section-title"><span>🌐 الصورة الكبرى</span><small id="aiBadge" hidden>تحليل ذكي AI</small></div><h2 id="bigTitle">جاري بناء الصورة الكبرى...</h2><p id="bigSummary">يتم تحميل أهم التطورات وربطها بتأثيرها المحتمل على الإمارات.</p></section>
-<section class="impact-grid" id="impactGrid">
- <article class="impact" data-domain="political"><div>🏛️ <b>سياسي</b></div><strong class="level">—</strong><span>التأثير: <b class="pct">—</b></span></article>
- <article class="impact" data-domain="economic"><div>📈 <b>اقتصادي</b></div><strong class="level">—</strong><span>التأثير: <b class="pct">—</b></span></article>
- <article class="impact" data-domain="military"><div>🛡️ <b>عسكري</b></div><strong class="level">—</strong><span>التأثير: <b class="pct">—</b></span></article>
-</section>
-<section class="glass"><div class="section-title"><span>⚡ آخر الأخبار الهامة</span></div><div id="latest" class="news-list"><div class="loading">جاري تحميل الأخبار...</div></div></section>
-<section class="glass"><div class="section-title"><span>الأخبار الأعلى أهمية</span></div><div class="filters" id="filters"><button class="active" data-filter="الكل">الكل</button><button data-filter="محلية">محلية</button><button data-filter="إقليمية">إقليمية</button><button data-filter="دولية">دولية</button></div><div id="important" class="news-list"></div></section>
-<section class="glass"><div class="section-title"><span>🧠 التحليل المتكامل</span><small id="analysisBadge" hidden>تحليل ذكي AI</small></div><div class="analysis"><div><b>سياسي</b><p id="politicalText">جاري التحليل...</p></div><div><b>اقتصادي</b><p id="economicText">جاري التحليل...</p></div><div><b>عسكري</b><p id="militaryText">جاري التحليل...</p></div></div></section>
-</main>
-<nav class="bottom"><a class="active" href="#">⌂<span>الرئيسية</span></a><a href="#impactGrid">🏛<span>سياسي</span></a><a href="#impactGrid">📈<span>اقتصادي</span></a><a href="#impactGrid">🛡<span>عسكري</span></a></nav>
-</div><div id="toast"></div><script src="/static/app.js?v=1.0.0" defer></script></body></html>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#061523">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="مرصد الإمارات الذكي لمتابعة أهم الأخبار واتجاهاتها وتأثيرها المحتمل على الإمارات.">
+  <title>مرصد الإمارات الذكي</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/assets/styles.css?v=1001">
+</head>
+<body>
+  <div class="bg-layer" aria-hidden="true"></div>
+
+  <main class="app-shell" id="home">
+    <header class="hero glass-panel">
+      <div class="hero-top">
+        <h1 id="appTitle">مرصد الإمارات الذكي</h1>
+        <div class="clock-card" aria-label="توقيت الإمارات">
+          <img src="/assets/uae-flag.svg" alt="علم الإمارات" width="42" height="28">
+          <time id="uaeClock" datetime="">--:--</time>
+        </div>
+      </div>
+
+      <p class="tagline" id="tagline">متابعة ذكية لأهم الأخبار واتجاهاتها وتأثيرها المحتمل على الإمارات.</p>
+
+      <div class="actions-row">
+        <button class="action primary" id="refreshBtn" type="button">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="refresh-icon" aria-hidden="true">↻</span>
+          <span class="btn-text">تحديث</span>
+        </button>
+        <button class="action" id="shareBtn" type="button"><span aria-hidden="true">↗</span><span>مشاركة</span></button>
+        <div class="last-update" id="lastUpdated">آخر تحديث: --:--</div>
+      </div>
+      <div class="notice" id="notice" role="status" aria-live="polite"></div>
+    </header>
+
+    <section class="duration-strip" aria-label="مدة الأخبار">
+      <button data-hours="6" type="button">6 ساعات</button>
+      <button data-hours="12" type="button">12 ساعة</button>
+      <button data-hours="24" class="selected" type="button">24 ساعة</button>
+      <button data-hours="48" type="button">48 ساعة</button>
+      <button data-hours="72" type="button">72 ساعة</button>
+    </section>
+
+    <section class="glass-panel big-picture" id="bigPictureSection">
+      <div class="section-heading">
+        <h2>الصورة الكبرى</h2>
+        <span class="ai-badge" id="bigAiBadge" hidden>تحليل ذكي AI</span>
+      </div>
+      <div class="big-picture-body">
+        <div class="picture-visual" aria-hidden="true">
+          <span class="orb"></span>
+          <span class="pulse-line"></span>
+        </div>
+        <div class="picture-copy">
+          <h3 id="bigTitle">جاري بناء الصورة الكبرى…</h3>
+          <p id="bigSummary">سنربط أهم الأخبار وتأثيراتها المحتملة على الإمارات بعد تحميل الأخبار.</p>
+          <a class="analysis-link" href="#integratedAnalysis">اقرأ التحليل الكامل ←</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="impact-grid" id="impactGrid" aria-label="مؤشرات التأثير">
+      <article class="impact-card low" data-domain="political">
+        <div class="impact-icon">▦</div>
+        <div><h3>سياسي</h3><strong class="impact-level">منخفض</strong><span class="impact-value">التأثير: 0%</span></div>
+      </article>
+      <article class="impact-card low" data-domain="economic">
+        <div class="impact-icon">↗</div>
+        <div><h3>اقتصادي</h3><strong class="impact-level">منخفض</strong><span class="impact-value">التأثير: 0%</span></div>
+      </article>
+      <article class="impact-card low" data-domain="military">
+        <div class="impact-icon">◈</div>
+        <div><h3>عسكري</h3><strong class="impact-level">منخفض</strong><span class="impact-value">التأثير: 0%</span></div>
+      </article>
+    </section>
+
+    <section class="glass-panel news-section" id="latestNewsSection">
+      <div class="section-heading">
+        <h2>آخر الأخبار الهامة</h2>
+        <button class="text-action" id="showMoreLatest" type="button">عرض الكل ←</button>
+      </div>
+      <div class="news-list" id="latestNewsList">
+        <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+      </div>
+    </section>
+
+    <section class="glass-panel analysis-section" id="integratedAnalysis">
+      <div class="section-heading">
+        <h2>التحليل المتكامل</h2>
+        <span class="ai-badge" id="analysisAiBadge" hidden>تحليل ذكي AI</span>
+      </div>
+      <div class="analysis-columns">
+        <article><span>سياسي</span><p id="politicalAnalysis">بانتظار الأخبار الحالية…</p></article>
+        <article><span>اقتصادي</span><p id="economicAnalysis">بانتظار الأخبار الحالية…</p></article>
+        <article><span>عسكري</span><p id="militaryAnalysis">بانتظار الأخبار الحالية…</p></article>
+      </div>
+    </section>
+
+    <section class="glass-panel news-section" id="topNewsSection">
+      <div class="section-heading stacked-mobile">
+        <h2>الأخبار الأعلى أهمية</h2>
+        <div class="category-tabs" role="tablist" aria-label="تصنيف الأخبار">
+          <button class="active" data-category="all" type="button">الكل</button>
+          <button data-category="local" type="button">محلية</button>
+          <button data-category="regional" type="button">إقليمية</button>
+          <button data-category="international" type="button">دولية</button>
+        </div>
+      </div>
+      <div class="news-list" id="topNewsList"></div>
+      <div class="empty-state" id="emptyState" hidden>لا توجد أخبار عربية موثوقة ضمن هذا التصنيف في الفترة المختارة.</div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="التنقل الرئيسي">
+    <button class="active" data-target="home" type="button"><span>⌂</span><small>الرئيسية</small></button>
+    <button data-domain-target="political" type="button"><span>▦</span><small>سياسي</small></button>
+    <button data-domain-target="economic" type="button"><span>↗</span><small>اقتصادي</small></button>
+    <button data-domain-target="military" type="button"><span>◈</span><small>عسكري</small></button>
+  </nav>
+
+  <script src="/assets/app.js?v=1001" defer></script>
+</body>
+</html>
