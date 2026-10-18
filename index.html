@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#071726">
+  <title>مرصد الإمارات الذكي</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css?v=1">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero glass">
+      <div class="hero-top">
+        <h1 id="appTitle">مرصد الإمارات الذكي</h1>
+        <div class="clock-card" aria-label="توقيت الإمارات">
+          <img src="/assets/uae-flag.svg" alt="علم الإمارات">
+          <strong id="uaeClock">--:--</strong>
+        </div>
+      </div>
+      <p class="subtitle">متابعة ذكية لأهم الأخبار واتجاهاتها وتأثيرها المحتمل على الإمارات.</p>
+      <div class="actions-row">
+        <button id="refreshBtn" class="primary-btn" type="button"><span class="refresh-icon">↻</span><span class="refresh-label">تحديث</span></button>
+        <button id="shareBtn" class="ghost-btn" type="button">مشاركة</button>
+        <div class="last-update">آخر تحديث: <span id="lastUpdated">--:--</span></div>
+      </div>
+    </header>
+
+    <section class="period-row" aria-label="فترة الأخبار">
+      <button data-hours="6">6 ساعات</button>
+      <button data-hours="12">12 ساعة</button>
+      <button class="active" data-hours="24">24 ساعة</button>
+      <button data-hours="48">48 ساعة</button>
+      <button data-hours="72">72 ساعة</button>
+    </section>
+
+    <main>
+      <section class="glass section big-picture">
+        <div class="section-head">
+          <h2>🌐 الصورة الكبرى</h2>
+          <span id="aiBadge" class="ai-badge hidden">تحليل ذكي AI</span>
+        </div>
+        <h3 id="bigHeadline">جاري بناء الصورة الكبرى...</h3>
+        <p id="bigSummary">يتم أولًا جلب الأخبار، ثم تحديث التحليل.</p>
+      </section>
+
+      <section class="impact-grid" aria-label="التأثير حسب المجال">
+        <article class="impact-card glass" data-domain="political">
+          <span class="domain-icon">🏛️</span><h3>سياسي</h3><strong id="politicalLevel">--</strong><b id="politicalImpact">--%</b>
+        </article>
+        <article class="impact-card glass" data-domain="economic">
+          <span class="domain-icon">📈</span><h3>اقتصادي</h3><strong id="economicLevel">--</strong><b id="economicImpact">--%</b>
+        </article>
+        <article class="impact-card glass" data-domain="military">
+          <span class="domain-icon">🛡️</span><h3>عسكري</h3><strong id="militaryLevel">--</strong><b id="militaryImpact">--%</b>
+        </article>
+      </section>
+
+      <section class="glass section news-section">
+        <div class="section-head news-title-row">
+          <h2>⚡ آخر الأخبار الهامة</h2>
+          <span id="newsState" class="muted">جاري التحميل...</span>
+        </div>
+        <div class="scope-tabs" role="tablist" aria-label="نطاق الأخبار">
+          <button class="active" data-scope="all">الكل</button>
+          <button data-scope="local">محلية</button>
+          <button data-scope="regional">إقليمية</button>
+          <button data-scope="international">دولية</button>
+        </div>
+        <div id="newsList" class="news-list"></div>
+        <div id="emptyNews" class="empty hidden">لا توجد أخبار عربية مطابقة حاليًا.</div>
+      </section>
+
+      <section class="glass section analysis-section">
+        <div class="section-head">
+          <h2>التحليل المتكامل</h2>
+          <span id="analysisBadge" class="ai-badge hidden">تحليل ذكي AI</span>
+        </div>
+        <div class="analysis-list">
+          <article><h3>سياسي</h3><p id="politicalAnalysis">بانتظار الأخبار...</p></article>
+          <article><h3>اقتصادي</h3><p id="economicAnalysis">بانتظار الأخبار...</p></article>
+          <article><h3>عسكري</h3><p id="militaryAnalysis">بانتظار الأخبار...</p></article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <nav class="bottom-nav glass" aria-label="التنقل">
+    <button class="active"><span>⌂</span>الرئيسية</button>
+    <button data-jump="political"><span>🏛️</span>سياسي</button>
+    <button data-jump="economic"><span>📈</span>اقتصادي</button>
+    <button data-jump="military"><span>🛡️</span>عسكري</button>
+  </nav>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="/assets/app.js?v=1" defer></script>
+</body>
+</html>
