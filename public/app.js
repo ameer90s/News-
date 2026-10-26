@@ -1,8 +1,9 @@
-/* مرصد الإمارات الذكي — v1.0.2 */
+/* مرصد الإمارات الذكي — v1.0.3 */
 (function () {
   'use strict';
 
   var HOURS = [6, 12, 24, 48, 72];
+  var IMPACT_MIN = 55;   // «مؤثرة» tab: stories whose potential impact on the UAE is at least this, wherever they happen
   var DOMAINS = {
     political: { name: 'سياسي', icon: 'i-bank' },
     economic: { name: 'اقتصادي', icon: 'i-chart' },
@@ -151,11 +152,20 @@
     return (t && isArabicText(t)) ? t : null;
   }
   function visible() {
-    var out = [];
+    var rs = state.ai && state.ai.rescored, out = [];
     state.items.forEach(function (it) {
       var t = titleOf(it);
-      if (t) out.push(Object.assign({}, it, { title: t }));
+      if (!t) return;
+      var o = Object.assign({}, it, { title: t, impact0: it.uae_impact });
+      var r = rs && rs[it.id];
+      if (r && typeof r.impact === 'number') {
+        o.importance = (it.importance || 0) + 0.65 * (r.impact - it.uae_impact);
+        o.uae_impact = r.impact;
+        if (r.why) o.why = r.why;
+      }
+      out.push(o);
     });
+    if (rs) out.sort(function (x, y) { return y.importance - x.importance; });
     return out;
   }
   function byDomain(list) { return state.domain === 'all' ? list : list.filter(function (i) { return i.domain === state.domain; }); }
@@ -255,9 +265,10 @@
     else id = DOMAINS[it.domain].icon;
     return h('span', { class: 'thumb' }, icon(id, fill ? 'fill' : ''));
   }
-  function row(it) {
+  function row(it, withScope) {
     var lv = level(it.uae_impact);
     var src = it.sources && it.sources[0] ? it.sources[0].name : '';
+    if (withScope && SCOPES[it.scope]) src = SCOPES[it.scope] + ' • ' + src;
     return h('button', { class: 'row', type: 'button', 'data-scope': it.scope, 'data-domain': it.domain, onclick: function () { openItem(it); } },
       thumb(it),
       h('span', { class: 'row-main' },
@@ -267,19 +278,25 @@
       h('span', { class: 'imp lv-' + lv }, h('small', null, LEVEL_AR[lv]), h('b', null, pct(it.uae_impact)))
     );
   }
-  function fillList(el, items, emptyMsg) {
+  function fillList(el, items, emptyMsg, withScope) {
     if (!state.loaded && !items.length) { el.replaceChildren(skel(72), skel(72), skel(72)); return; }
     if (!items.length) { el.replaceChildren(h('div', { class: 'empty' }, emptyMsg)); return; }
-    el.replaceChildren.apply(el, items.map(row));
+    el.replaceChildren.apply(el, items.map(function (it) { return row(it, withScope); }));
   }
   function renderLatest(V) {
     var base = byDomain(V).slice(0, 12).sort(function (a, b) { return Date.parse(b.published) - Date.parse(a.published); }).slice(0, 3);
     fillList($('latestList'), base, state.loaded ? 'لا توجد أخبار هامة ضمن هذه الفترة.' : '');
   }
   function renderTop(V) {
-    var list = byDomain(V);
-    if (state.scope !== 'all') list = list.filter(function (i) { return i.scope === state.scope; });
-    fillList($('topList'), list.slice(0, 10), state.loaded ? 'لا توجد أخبار ضمن هذا التصنيف حاليًا.' : '');
+    var list = byDomain(V), msg = 'لا توجد أخبار ضمن هذا التصنيف حاليًا.', impactTab = state.scope === 'impact';
+    if (impactTab) {
+      list = list.filter(function (i) { return i.uae_impact >= IMPACT_MIN; })
+                 .sort(function (x, y) { return (y.uae_impact - x.uae_impact) || (y.importance - x.importance); });
+      msg = 'لا توجد أخبار عالية التأثير على الإمارات حاليًا.';
+    } else if (state.scope !== 'all') {
+      list = list.filter(function (i) { return i.scope === state.scope; });
+    }
+    fillList($('topList'), list.slice(0, 10), state.loaded ? msg : '', impactTab);
   }
   function renderAnalysis(V) {
     var an = analysisFor(V), slot = $('anAi');
@@ -334,7 +351,9 @@
         h('span', { class: 'chip' }, DOMAINS[it.domain].name),
         h('span', { class: 'chip' }, SCOPES[it.scope] || ''),
         h('span', { class: 'chip' }, ago(it.published)),
+        it.updates >= 3 ? h('span', { class: 'chip' }, 'قصة متطورة • ' + plural(it.updates, 'تحديث', 'تحديثان', 'تحديثات', 'تحديثًا')) : null,
         h('span', { class: 'chip imp-chip lv-' + lv }, 'التأثير: ', pct(it.uae_impact))),
+      (it.why && it.uae_impact > 33) ? h('p', { class: 'sh-why lv-' + lv }, h('b', null, 'لماذا يهم الإمارات: '), it.why) : null,
       h('h4', { class: 'sh-h' }, 'المصادر الأصلية'),
       srcs));
   }
@@ -423,42 +442,44 @@
   function post(url, body, ms) {
     return fetchJSON(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, ms);
   }
+  // One request per refresh: Arabic headlines for English stories + big picture / integrated analysis + a second
+  // opinion on the impact of the top stories. Each part is optional: whatever fails simply keeps its local fallback.
   function runAI(id, hours) {
     var need = state.items.filter(function (i) { return !titleOf(i); }).slice(0, 30);
-    if (need.length) doTranslate(need, id);
     var top = visible().slice(0, 25);
-    if (top.length >= 3) doAnalyze(top, id, hours);
-  }
-  function doTranslate(need, id) {
-    post('/api/translate', { items: need.map(function (i) { return { id: i.id, title: (i.sources[0] || {}).title || '' }; }) }, 28000)
-      .then(function (res) {
-        if (!res || !res.ok || !res.translations) return;
-        var keys = Object.keys(res.translations);
-        if (!keys.length) return;
+    var wantAn = top.length >= 3;
+    var ids = top.map(function (i) { return i.id; }).sort();
+    var cached = lsGet(LS.ai(hours));
+    // the saved analysis is reused while it still covers most of the current top stories (items translated by the
+    // previous call join the list afterwards, so an exact match would make every refresh pay for a new request)
+    var covered = 0;
+    if (cached && cached.ids) { var had = {}; cached.ids.forEach(function (k) { had[k] = 1; }); ids.forEach(function (k) { if (had[k]) covered++; }); }
+    if (wantAn && cached && cached.ids && covered >= 0.6 * ids.length && Date.now() - cached.at < 30 * 60 * 1000) {
+      state.ai = cached.data;
+      if (id === state.reqId) render();
+      wantAn = false;
+    }
+    if (!need.length && !wantAn) return;
+    post('/api/enrich', {
+      hours: hours,
+      translate: need.map(function (i) { return { id: i.id, title: (i.sources[0] || {}).title || '' }; }),
+      items: wantAn ? top.map(function (i) { return { id: i.id, title: i.title, scope: i.scope, domain: i.domain, uae_impact: i.impact0 }; }) : []
+    }, 29000).then(function (res) {
+      if (!res || !res.ok) throw new Error('no ai');
+      var keys = Object.keys(res.translations || {});
+      if (keys.length) {
         keys.forEach(function (k) { state.tr[k] = res.translations[k]; });
         var all = Object.keys(state.tr);
         if (all.length > 400) all.slice(0, all.length - 400).forEach(function (k) { delete state.tr[k]; });
         lsSet(LS.tr, state.tr);
-        if (id === state.reqId) render();
-      }).catch(function () { /* translation is best-effort; untranslated items simply stay hidden */ });
-  }
-  function doAnalyze(top, id, hours) {
-    var sig = top.map(function (i) { return i.id; }).join(',');
-    var cached = lsGet(LS.ai(hours));
-    if (cached && cached.sig === sig && Date.now() - cached.at < 30 * 60 * 1000) {
-      state.ai = cached.data;
-      if (id === state.reqId) render();
-      return;
-    }
-    post('/api/analyze', {
-      hours: hours,
-      items: top.map(function (i) { return { id: i.id, title: i.title, scope: i.scope, domain: i.domain, uae_impact: i.uae_impact }; })
-    }, 30000).then(function (res) {
-      if (!res || !res.ok || !res.big_picture) throw new Error('no ai');
-      state.ai = res;
-      lsSet(LS.ai(hours), { sig: sig, at: Date.now(), data: res });
+      }
+      if (wantAn) {
+        if (!res.big_picture) throw new Error('no analysis');
+        state.ai = res;
+        lsSet(LS.ai(hours), { ids: ids, at: Date.now(), data: res });
+      }
     }).catch(function () {
-      state.ai = (cached && Date.now() - cached.at < 3 * 3600 * 1000) ? cached.data : null;
+      if (wantAn) state.ai = (cached && Date.now() - cached.at < 3 * 3600 * 1000) ? cached.data : null;
     }).finally(function () {
       if (id === state.reqId) render();
     });
@@ -522,7 +543,7 @@
       location.reload();
     });
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/sw.js?v=1.0.2', { updateViaCache: 'none' }).then(function (reg) {
+      navigator.serviceWorker.register('/sw.js?v=1.0.3', { updateViaCache: 'none' }).then(function (reg) {
         reg.update().catch(function () {});
       }).catch(function () {});
     });

@@ -1,5 +1,5 @@
 /* مرصد الإمارات الذكي — Service Worker. ارفع VERSION مع كل إصدار (tools/bump_version.py). */
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const CACHE = 'mirsad-' + VERSION;
 const SHELL = [
   '/',

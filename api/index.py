@@ -1,8 +1,11 @@
 """FastAPI entrypoint (Vercel serves this file as /api/index; vercel.json rewrites /api/* to it)."""
 import asyncio
+import json
 import os
 import sys
 import time
+import urllib.error
+import urllib.request
 from urllib.parse import urlencode
 
 # Make the project root importable both on Vercel and when run locally (uvicorn api.index:app).
@@ -48,6 +51,15 @@ async def api_analyze(request: Request):
     return _json(await ai.analyze(body))
 
 
+@app.post("/api/enrich")
+async def api_enrich(request: Request):
+    try:
+        body = await request.json()
+    except ValueError:
+        return _json({"ok": False, "reason": "bad_request"}, 400)
+    return _json(await ai.enrich(body))
+
+
 @app.get("/api/health")
 async def api_health():
     return _json({"ok": True, "ai_configured": ai.configured(), "model": ai.model_name()})
@@ -71,6 +83,57 @@ async def _probe(url: str) -> dict:
                 "detail": str(e)[:140]}
 
 
+_AI_PROBE_AT = 0.0
+
+
+def _gemini_http(method: str, url: str, body: dict | None = None) -> tuple[int, dict]:
+    """One raw Gemini call for diagnostics. Returns (http_status, small summary). Never includes the key."""
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    req = urllib.request.Request(
+        url, method=method, data=None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json; charset=utf-8", "x-goog-api-key": key})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.status, json.loads(r.read(600_000).decode("utf-8", "replace"))
+    except urllib.error.HTTPError as e:
+        raw = e.read(4000).decode("utf-8", "replace")
+        try:
+            err = json.loads(raw).get("error")
+        except (ValueError, AttributeError):
+            err = None
+        if not isinstance(err, dict):
+            err = {"message": raw[:160]}
+        return e.code, {"status": err.get("status"), "message": str(err.get("message", ""))[:220]}
+    except Exception as e:  # noqa: BLE001
+        return 0, {"error": type(e).__name__, "detail": str(e)[:120]}
+
+
+def _ai_probe() -> dict:
+    out: dict = {"configured": ai.configured(), "model": ai.model_name(), "model_from_env": bool(os.environ.get("GEMINI_MODEL"))}
+    if not ai.configured():
+        out["result"] = "GEMINI_API_KEY is not set"
+        return out
+    t0 = time.monotonic()
+    code, data = _gemini_http("POST", f"{ai.GEMINI_BASE}/models/{ai.model_name()}:generateContent", {
+        "contents": [{"role": "user", "parts": [{"text": "اكتب كلمة واحدة: جاهز"}]}],
+        "generationConfig": {"maxOutputTokens": 16, "temperature": 0}})
+    out["http"] = code
+    out["ms"] = int((time.monotonic() - t0) * 1000)
+    if code == 200:
+        out["result"] = "ok"
+        cands = data.get("candidates") or []
+        out["finish"] = (cands[0].get("finishReason") if cands else None)
+    else:
+        out["result"] = data
+    if code == 404:  # wrong model name: list what this key can actually use
+        c2, d2 = _gemini_http("GET", f"{ai.GEMINI_BASE}/models?pageSize=200")
+        if c2 == 200:
+            names = [m.get("name", "").removeprefix("models/") for m in d2.get("models", [])
+                     if "generateContent" in (m.get("supportedGenerationMethods") or [])]
+            out["usable_models"] = [n for n in names if "gemini" in n and "flash" in n][:14]
+    return out
+
+
 async def _diag(request: Request, seen: str, mode: str) -> dict:
     """Temporary diagnostics: ?diag=1 shows how the request reached the app, ?diag=net also probes the news sources."""
     scope = request.scope
@@ -92,6 +155,13 @@ async def _diag(request: Request, seen: str, mode: str) -> dict:
         "ai_configured": ai.configured(),
         "model": ai.model_name(),
     }
+    if mode == "ai":
+        global _AI_PROBE_AT
+        if time.monotonic() - _AI_PROBE_AT < 15:      # a public URL that spends API quota: allow one probe per 15 s
+            out["ai"] = {"result": "wait 15 seconds between probes"}
+        else:
+            _AI_PROBE_AT = time.monotonic()
+            out["ai"] = await asyncio.to_thread(_ai_probe)
     if mode == "net":
         gd = f"{sources.GDELT_URL}?" + urlencode({"query": "الإمارات sourcelang:arabic", "mode": "artlist",
                                                   "format": "json", "maxrecords": "5", "timespan": "6h"})
@@ -115,8 +185,10 @@ async def _fallback(request: Request, rest: str):
             return _json({"ok": False, "reason": "bad_request"}, 400)
         if not isinstance(body, dict):
             return _json({"ok": False, "reason": "bad_request"}, 400)
-        op = last if last in ("translate", "analyze") else ("analyze" if "hours" in body else "translate")
-        return _json(await (ai.analyze(body) if op == "analyze" else ai.translate(body)))
+        op = last if last in ("enrich", "translate", "analyze") else (
+            "enrich" if "translate" in body else ("analyze" if "hours" in body else "translate"))
+        fn = {"enrich": ai.enrich, "analyze": ai.analyze, "translate": ai.translate}[op]
+        return _json(await fn(body))
     op = last if last in ("news", "health") else ("news" if "hours" in q else "health")
     if op == "health":
         return await api_health()

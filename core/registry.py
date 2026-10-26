@@ -8,9 +8,9 @@ from __future__ import annotations
 
 # kind -> (Arabic tag shown in the UI, importance bonus)
 KINDS = {
-    "official":    ("رسمي", 5.0),
-    "specialized": ("متخصص", 3.0),
-    "agency":      ("وكالة/قناة كبرى", 2.0),
+    "official":    ("رسمي", 10.0),
+    "specialized": ("متخصص", 5.0),
+    "agency":      ("وكالة/قناة كبرى", 3.0),
     "press":       ("صحافة محلية", 1.0),
 }
 

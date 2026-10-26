@@ -139,6 +139,42 @@ _LOW = _compile(
     "football|soccer|match|league|celebrity|festival|concert"
 )
 
+# ---- transmission channels: how an event, even a far-away one, reaches the UAE ----------------------------
+# key -> (weight, Arabic reason shown to the reader, keywords)
+_CHANNELS = {
+    "energy": (8, "يمسّ أسواق الطاقة والنفط التي يعتمد عليها اقتصاد الإمارات", _compile(
+        "نفط|غاز|اوبك|برميل|برنت|بترول|وقود|مصافي|طاقه|"
+        "oil|crude|opec|brent|lng|energy|refiner")),
+    "shipping": (8, "قد يؤثر على الملاحة والطيران عبر الخليج", _compile(
+        "ملاحه|شحن|موانئ|ميناء|ناقله|ناقلات|قناه السويس|باب المندب|بحر الاحمر|هرمز|طيران|مطار|مطارات|"
+        "رحلات جويه|اجواء|حاويات|"
+        "shipping|tanker|suez|red sea|airspace|flights|airline|airport|container")),
+    "trade": (10, "قد يؤثر على التجارة والعقوبات وسلاسل الإمداد", _compile(
+        "تعريفه|تعريفات|جمارك|رسوم جمركيه|عقوبات|عقوبه|حظر|حصار|تجاره|صادرات|واردات|سلاسل الامداد|"
+        "tariff|sanction|embargo|exports|imports|supply chain|trade war")),
+    "finance": (6, "يؤثر على المال العالمي وأسعار الفائدة والدولار", _compile(
+        "فيدرالي|فائده|تضخم|دولار|يورو|بنك مركزي|ركود|وول ستريت|ذهب|سندات|بيتكوين|"
+        "fed|interest rate|inflation|dollar|recession|wall street|gold|bond|bitcoin")),
+    "powers": (8, "تطور يخص قوى كبرى شريكة للإمارات", _compile(
+        "امريكا|امريكي|امريكيه|ولايات المتحده|واشنطن|ترامب|بيت الابيض|صين|بكين|روسيا|روسي|موسكو|بوتين|"
+        "الهند|للهند|بالهند|هندي|دلهي|اتحاد الاوروبي|اوروبا|ناتو|"
+        "washington|white house|trump|china|beijing|russia|moscow|putin|india|nato|european union")),
+    "tech": (8, "يخص التقنية والذكاء الاصطناعي حيث تستثمر الإمارات", _compile(
+        "ذكاء اصطناعي|رقائق|اشباه الموصلات|انفيديا|مراكز بيانات|"
+        "artificial intelligence|chips|semiconductor|nvidia|data center")),
+    "institutions": (10, "قرار أو حدث في مؤسسة دولية تؤثر على موقف الإمارات", _compile(
+        "امم المتحده|مجلس الامن|امين العام|جمعيه العامه|جامعه الدول العربيه|مجلس التعاون|مجموعه العشرين|بريكس|"
+        "اوبك بلس|مؤتمر المناخ|منظمه التجاره|صندوق النقد|بنك الدولي|"
+        "united nations|security council|secretary-general|secretary general|g20|brics|opec+|imf|world bank")),
+}
+
+# diplomatic / institutional "events": nominations, appointments, agreements, statements, official visits
+_EVENT = _compile(
+    "ترشيح|ترشح|مرشح|مرشحه|تعيين|منصب|انتخاب|فوز|توقيع|توقع|اتفاقيه|معاهده|شراكه|عضويه|انضمام|زياره رسميه|"
+    "يستقبل|يلتقي|يبحث|تصريحات|تصريح|بيان مشترك|وساطه|قمه|"
+    "nominat|appoint|elected|sign|agreement|treaty|membership|joint statement|summit|mediat"
+)
+
 
 # ------------------------------------------------------------ classification
 
@@ -164,26 +200,59 @@ def classify_domain(text: str) -> str:
 
 
 _BASE_IMPACT = {"local": 30, "regional": 36, "international": 15}
+_CH_ORDER = ("institutions", "trade", "energy", "shipping", "powers", "tech", "finance")
+
+
+def assess(text: str, scope: str, n_sources: int = 1) -> tuple[int, str]:
+    """Heuristic 0-100 'potential impact on the UAE' plus a short Arabic reason (may be empty).
+
+    The event does not have to be about the UAE: a far-away story scores through the channels by which it
+    reaches the UAE (energy, shipping/aviation, trade and sanctions, finance, major partners, technology,
+    international institutions). A story with no channel and no UAE link stays low, so the list never turns
+    into a random world feed. Gemini may refine the number later (see core/ai.py).
+    """
+    t = norm(text)
+    score = _BASE_IMPACT.get(scope, 15)
+    reasons: list[str] = []
+    high = _count(_HIGH, t)
+    score += min(high, 3) * 14
+    if scope == "regional" and high:
+        score += 10  # hostile events nearby weigh more on the UAE
+        reasons.append("حدث أمني أو أزمة في محيط الإمارات")
+    elif high and scope == "international":
+        reasons.append("توتر دولي قد تمتد آثاره إلى المنطقة")
+    score += min(_count(_MEDIUM, t), 3) * 6
+    hits = [k for k in _CH_ORDER if _count(_CHANNELS[k][2], t)]
+    score += sum(_CHANNELS[k][0] for k in hits[:2])
+    reasons += [_CHANNELS[k][1] for k in hits[:2]]
+    if "powers" in hits and len(hits) > 1:  # a major power acting on trade / energy / sanctions / finance
+        score += 8
+    event = _count(_EVENT, t) > 0
+    uae = scope == "local" and _count(LOCAL, t) > 0
+    if event and hits:  # a diplomatic / institutional event with an international dimension
+        if uae:
+            score += 18
+            reasons.insert(0, "الإمارات طرف مباشر في الحدث")
+        else:
+            score += 12
+    if _count(_LOW, t):
+        score -= 10
+    score += min(max(n_sources - 1, 0), 3) * 4
+    impact = int(max(5, min(96, score)))
+    return impact, ("، ".join(reasons[:2]) if impact > 33 else "")  # a reason is shown only for mid / high impact
 
 
 def estimate_impact(text: str, scope: str, n_sources: int = 1) -> int:
-    """Heuristic 0-100 'potential impact on the UAE'. Gemini may refine it later."""
-    t = norm(text)
-    score = _BASE_IMPACT.get(scope, 15)
-    high = _count(_HIGH, t)
-    score += min(high, 3) * 14
-    score += 10 if (scope == "regional" and high) else 0  # hostile events nearby weigh more on the UAE
-    score += min(_count(_MEDIUM, t), 3) * 6
-    score -= 10 if _count(_LOW, t) else 0
-    score += min(max(n_sources - 1, 0), 3) * 3
-    return int(max(5, min(96, score)))
+    return assess(text, scope, n_sources)[0]
 
 
-def importance(impact: int, published: datetime, now: datetime, hours: int, n_sources: int, trust: float = 0.0) -> float:
-    """`trust` is a small bonus (0-5) for official / specialised publishers, see core/registry.py."""
+def importance(impact: int, published: datetime, now: datetime, hours: int, n_sources: int,
+               trust: float = 0.0, story: float = 0.0) -> float:
+    """`trust`: bonus (0-10) for official / specialised publishers, see core/registry.py.
+    `story`: bonus for a developing story (several articles / updates over time), see core/sources.py."""
     age_h = max((now - published).total_seconds() / 3600.0, 0.0)
     recency = max(0.0, 1.0 - age_h / float(hours))
-    return round(impact * 0.65 + recency * 20.0 + min(max(n_sources - 1, 0), 3) * 5.0 + trust, 2)
+    return round(impact * 0.65 + recency * 20.0 + min(max(n_sources - 1, 0), 4) * 6.0 + trust + story, 2)
 
 
 def impact_level(value: int | float | None) -> str:
