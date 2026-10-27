@@ -1,8 +1,9 @@
-/* مرصد الإمارات الذكي — v1.0.3 */
+/* مرصد الإمارات الذكي — v1.1.0 */
 (function () {
   'use strict';
 
   var HOURS = [6, 12, 24, 48, 72];
+  var DUP_MAX = 12;      // a story that repeats a better-ranked one by this much is hidden from the «مؤثرة» tab
   var IMPACT_MIN = 55;   // «مؤثرة» tab: stories whose potential impact on the UAE is at least this, wherever they happen
   var DOMAINS = {
     political: { name: 'سياسي', icon: 'i-bank' },
@@ -14,7 +15,9 @@
   var LEVEL_AR = { low: 'منخفض', mid: 'متوسط', high: 'مرتفع', none: '—' };
   var KIND_AR = { official: 'رسمي', specialized: 'متخصص', agency: 'وكالة/قناة كبرى', press: 'صحافة محلية' };
   var SVGNS = 'http://www.w3.org/2000/svg';
+  var RADAR_MAX_AGE = 36 * 3600 * 1000;   // an edition older than this is ignored (the server applies the same limit)
   var LS = {
+    radar: 'mirsad.radar',
     hours: 'mirsad.hours',
     tr: 'mirsad.tr',
     news: function (h) { return 'mirsad.news.' + h; },
@@ -24,7 +27,7 @@
   var state = {
     hours: 24, domain: 'all', scope: 'all',
     items: [], loaded: false, fetchedAt: null,
-    tr: {}, ai: null, busy: false, reqId: 0
+    tr: {}, ai: null, radar: null, busy: false, reqId: 0
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -32,6 +35,7 @@
   /* ------------------------------------------------------------- storage */
   function lsGet(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage full / blocked */ } }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* blocked */ } }
 
   /* ---------------------------------------------------------------- utils */
   function h(tag, props) {
@@ -157,7 +161,7 @@
       var t = titleOf(it);
       if (!t) return;
       var o = Object.assign({}, it, { title: t, impact0: it.uae_impact });
-      var r = rs && rs[it.id];
+      var r = rs && !it.radar && rs[it.id];
       if (r && typeof r.impact === 'number') {
         o.importance = (it.importance || 0) + 0.65 * (r.impact - it.uae_impact);
         o.uae_impact = r.impact;
@@ -182,6 +186,29 @@
     return out;
   }
 
+  /* ------------------------------------------------------------ radar edition */
+  // «رادار الأخبار»: while an edition is fresh its executive overview and per-domain analysis feed the big picture and the
+  // integrated analysis (same places, same cards); its stories arrive as ordinary news items flagged radar:true.
+  function radarNow() {
+    var r = state.radar;
+    return (r && r.domains && Date.now() - Date.parse(r.created_at) < RADAR_MAX_AGE) ? r : null;
+  }
+  function stripRefs(t) { return String(t || '').replace(/\s*\[\d+(?:\s*[,،]\s*\d+)*\]/g, '').replace(/\s+([،.؛:)])/g, '$1').trim(); }
+  function radarTime(r) { var m = /·\s*([\d:]+)\s*$/.exec(r.label_ar || ''); return m ? m[1] : ''; }
+  // title = the Radar's own headline when it has one, else the first clause of the overview; the summary then continues
+  // from the second sentence so the card does not say the same thing twice
+  function radarLead(r) {
+    var ex = r.executive || {}, ov = ex.overview || '';
+    if (ex.headline) return { title: ex.headline, summary: ov };
+    var m = /[.؟!]\s/.exec(ov), first = m ? ov.slice(0, m.index) : ov, rest = m ? ov.slice(m.index + 2).trim() : '';
+    var title = first;
+    if (title.length > 95) {
+      var c = title.indexOf('،', 28);
+      title = (c > 0 && c <= 95) ? title.slice(0, c) : title.slice(0, Math.max(40, title.lastIndexOf(' ', 92))) + '…';
+    }
+    return { title: title, summary: rest || ov };
+  }
+
   /* --------------------------------------------------------------- analysis */
   function localDomainText(d, stat) {
     if (!stat.top) return 'لا توجد أخبار بارزة في هذا المجال خلال آخر ' + hoursLabel(state.hours) + '.';
@@ -190,7 +217,14 @@
     return 'عدد الأخبار المرصودة: ' + stat.list.length + '. الأعلى تأثيرًا: «' + stat.top.title + '». ' + tail;
   }
   function analysisFor(V) {
-    var stats = domainStats(V);
+    var stats = domainStats(V), rd = radarNow();
+    if (rd) {
+      var rrows = DOMAIN_KEYS.map(function (d) {
+        var dd = rd.domains[d];
+        return { d: d, impact: stats[d].impact, radar: !!dd, text: dd ? stripRefs(dd.headline) : localDomainText(d, stats[d]) };
+      });
+      return { rows: rrows, ai: false, radar: true, stats: stats };
+    }
     var ai = state.ai && state.ai.analysis;
     var complete = !!(ai && DOMAIN_KEYS.every(function (d) { return ai[d]; }));
     var rows = DOMAIN_KEYS.map(function (d) {
@@ -199,6 +233,8 @@
     return { rows: rows, ai: complete, stats: stats };
   }
   function bigPictureFor(V) {
+    var rd = radarNow();
+    if (rd && rd.executive && rd.executive.overview) { var lead = radarLead(rd); return { title: lead.title, summary: lead.summary, ai: false, radar: true }; }
     if (state.ai && state.ai.big_picture) return { title: state.ai.big_picture.title, summary: state.ai.big_picture.summary, ai: true };
     if (!V.length) return null;
     var stats = domainStats(V), best = null;
@@ -210,6 +246,7 @@
     return { title: V[0].title, summary: s, ai: false };
   }
   function aiBadge() { return h('span', { class: 'ai-badge' }, icon('i-spark'), 'تحليل ذكي AI'); }
+  function radarBadge() { return h('span', { class: 'ai-badge badge-radar' }, icon('i-spark'), 'رادار الأخبار'); }
 
   /* ----------------------------------------------------------------- render */
   function render() {
@@ -240,7 +277,8 @@
     }
     t.textContent = bp.title;
     s.textContent = bp.summary;
-    if (bp.ai) slot.appendChild(aiBadge());
+    if (bp.radar) slot.appendChild(radarBadge());
+    else if (bp.ai) slot.appendChild(aiBadge());
   }
 
   function domainCard(d, st) {
@@ -273,7 +311,7 @@
       thumb(it),
       h('span', { class: 'row-main' },
         h('span', { class: 'row-title' }, it.title),
-        h('span', { class: 'row-meta', style: 'display:block' }, src + ' • ' + ago(it.published))
+        h('span', { class: 'row-meta', style: 'display:block' }, src + ' • ' + (it.radar && it.when ? it.when : ago(it.published)))
       ),
       h('span', { class: 'imp lv-' + lv }, h('small', null, LEVEL_AR[lv]), h('b', null, pct(it.uae_impact)))
     );
@@ -283,34 +321,44 @@
     if (!items.length) { el.replaceChildren(h('div', { class: 'empty' }, emptyMsg)); return; }
     el.replaceChildren.apply(el, items.map(function (it) { return row(it, withScope); }));
   }
+  var latestIds = {};   // stories already shown in «آخر الأخبار الهامة»: not repeated in the list below it
   function renderLatest(V) {
     var base = byDomain(V).slice(0, 12).sort(function (a, b) { return Date.parse(b.published) - Date.parse(a.published); }).slice(0, 3);
+    latestIds = {};
+    base.forEach(function (i) { latestIds[i.id] = 1; });
     fillList($('latestList'), base, state.loaded ? 'لا توجد أخبار هامة ضمن هذه الفترة.' : '');
   }
   function renderTop(V) {
     var list = byDomain(V), msg = 'لا توجد أخبار ضمن هذا التصنيف حاليًا.', impactTab = state.scope === 'impact';
     if (impactTab) {
-      list = list.filter(function (i) { return i.uae_impact >= IMPACT_MIN; })
+      // near-copies of a better-ranked story (dup >= DUP_MAX) are left out of this tab so each line is a different event
+      list = list.filter(function (i) { return i.uae_impact >= IMPACT_MIN && !(i.dup >= DUP_MAX); })
                  .sort(function (x, y) { return (y.uae_impact - x.uae_impact) || (y.importance - x.importance); });
       msg = 'لا توجد أخبار عالية التأثير على الإمارات حاليًا.';
     } else if (state.scope !== 'all') {
       list = list.filter(function (i) { return i.scope === state.scope; });
     }
+    var rest = list.filter(function (i) { return !latestIds[i.id]; });
+    if (rest.length) list = rest;      // never leave a tab empty just to avoid showing a story twice
     fillList($('topList'), list.slice(0, 10), state.loaded ? msg : '', impactTab);
   }
   function renderAnalysis(V) {
     var an = analysisFor(V), slot = $('anAi');
     slot.replaceChildren();
-    if (an.ai) slot.appendChild(aiBadge());
+    if (an.radar) slot.appendChild(radarBadge());
+    else if (an.ai) slot.appendChild(aiBadge());
     if (!state.loaded && !V.length) { $('anList').replaceChildren(skel(70), skel(70), skel(70)); return; }
     $('anList').replaceChildren.apply($('anList'), an.rows.map(analysisBlock));
   }
   function analysisBlock(r) {
     var lv = level(r.impact);
-    return h('div', { class: 'an' },
+    var open = r.radar ? function () { openRadar(r.d); } : null;
+    return h('div', { class: 'an' + (open ? ' tap' : ''), role: open ? 'button' : null, tabindex: open ? '0' : null,
+        onclick: open, onkeydown: open ? function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } } : null },
       h('div', { class: 'an-head' }, icon(DOMAINS[r.d].icon), h('b', null, DOMAINS[r.d].name),
         r.impact == null ? null : h('span', { class: 'imp lv-' + lv }, h('small', null, LEVEL_AR[lv]), h('b', null, pct(r.impact)))),
-      h('p', null, r.text));
+      h('p', null, r.text),
+      open ? h('span', { class: 'more' }, 'التحليل الكامل', icon('i-left')) : null);
   }
 
   function renderControls() {
@@ -336,31 +384,123 @@
   sheet.addEventListener('click', function (e) { if (e.target === sheet) sheet.close(); });
   $('sheetX').addEventListener('click', function () { sheet.close(); });
 
-  function openItem(it) {
+  function openItem(it, back) {
     var lv = level(it.uae_impact);
     var srcs = (it.sources || []).map(function (s) {
       var href = safeUrl(s.url);
       var tag = KIND_AR[s.kind] ? h('em', { class: 'tag k-' + s.kind }, KIND_AR[s.kind]) : null;
-      var inner = [h('b', null, icon('i-out'), s.name || 'المصدر', tag), h('span', { lang: s.lang === 'ar' ? 'ar' : 'en' }, s.title)];
+      var inner = [h('b', null, icon('i-out'), s.name || 'المصدر', tag)];
+      if (s.title && s.title !== it.title) inner.push(h('span', { lang: s.lang === 'ar' ? 'ar' : 'en' }, s.title));
       return href ? h('a', { class: 'src', href: href, target: '_blank', rel: 'noopener noreferrer' }, inner)
                   : h('div', { class: 'src' }, inner);
     });
     openSheet(h('div', null,
+      back ? backButton(back) : null,
       h('h3', { class: 'sh-title', id: 'sheetTitle' }, it.title),
       h('div', { class: 'sh-meta' },
+        it.radar ? h('span', { class: 'chip chip-radar' }, 'رادار الأخبار') : null,
         h('span', { class: 'chip' }, DOMAINS[it.domain].name),
         h('span', { class: 'chip' }, SCOPES[it.scope] || ''),
-        h('span', { class: 'chip' }, ago(it.published)),
+        h('span', { class: 'chip' }, it.radar && it.when ? it.when : ago(it.published)),
         it.updates >= 3 ? h('span', { class: 'chip' }, 'قصة متطورة • ' + plural(it.updates, 'تحديث', 'تحديثان', 'تحديثات', 'تحديثًا')) : null,
         h('span', { class: 'chip imp-chip lv-' + lv }, 'التأثير: ', pct(it.uae_impact))),
+      it.summary ? h('p', { class: 'sh-text' }, it.summary) : null,
       (it.why && it.uae_impact > 33) ? h('p', { class: 'sh-why lv-' + lv }, h('b', null, 'لماذا يهم الإمارات: '), it.why) : null,
       h('h4', { class: 'sh-h' }, 'المصادر الأصلية'),
       srcs));
   }
 
+  function backButton(fn) {
+    return h('button', { type: 'button', class: 'sh-back', onclick: fn }, icon('i-left'), 'العودة إلى التحليل');
+  }
+  // «[3]» inside the Radar's text becomes a button that opens story 3 of that domain
+  function cites(text, d, dom) {
+    var out = [], re = /\[(\d+(?:\s*[,،]\s*\d+)*)\]/g, last = 0, m;
+    while ((m = re.exec(text))) {
+      if (m.index > last) out.push(text.slice(last, m.index));
+      m[1].split(/\s*[,،]\s*/).forEach(function (n) { out.push(citeBtn(d, dom, n)); });
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push(text.slice(last));
+    return out;
+  }
+  function citeBtn(d, dom, n) {
+    var id = dom && dom.refs && dom.refs[n], it = null;
+    if (id) { var V = visible(); for (var i = 0; i < V.length; i++) if (V[i].id === id) { it = V[i]; break; } }
+    if (!it) return h('span', { class: 'cite off' }, n);
+    return h('button', { type: 'button', class: 'cite', 'aria-label': 'الخبر ' + n, onclick: function () { openItem(it, function () { openRadar(d); }); } }, n);
+  }
+  function list(arr, d, dom) {
+    if (!arr || !arr.length) return null;
+    return h('ul', { class: 'rd-list' }, arr.map(function (t) { return h('li', null, d ? cites(t, d, dom) : t); }));
+  }
+  function section(title, node) { return node ? [h('h4', { class: 'sh-h' }, title), node] : null; }
+
+  function domainDetails(d, dom, open) {
+    var lv = dom.risk && dom.risk !== 'none' ? dom.risk : 'none';
+    var det = h('details', { class: 'dd', 'data-d': d });
+    if (open) det.setAttribute('open', '');
+    det.appendChild(h('summary', null, icon(DOMAINS[d].icon), h('b', null, DOMAINS[d].name),
+      dom.risk_level ? h('span', { class: 'chip imp-chip lv-' + lv }, 'المخاطر: ' + dom.risk_level) : null,
+      icon('i-left', 'chev')));
+    var lvl = dom.levels || {};
+    var kd = (dom.key_developments || []).map(function (k) {
+      var id = dom.refs && dom.refs[k.ref], V = id ? visible() : [], it = null;
+      for (var i = 0; i < V.length; i++) if (V[i].id === id) { it = V[i]; break; }
+      var inner = [h('b', null, k.title), k.significance ? h('span', null, k.significance) : null];
+      return it ? h('button', { type: 'button', class: 'kd', onclick: function () { openItem(it, function () { openRadar(d); }); } }, inner)
+                : h('div', { class: 'kd' }, inner);
+    });
+    det.appendChild(h('div', { class: 'dd-body' },
+      dom.headline ? h('p', { class: 'dd-head' }, cites(dom.headline, d, dom)) : null,
+      dom.summary ? h('p', { class: 'sh-text' }, cites(dom.summary, d, dom)) : null,
+      dom.confidence ? h('p', { class: 'dd-conf' }, 'درجة الثقة: ' + dom.confidence) : null,
+      section('على مستوى الإمارات', lvl.uae ? h('p', { class: 'sh-text' }, cites(lvl.uae, d, dom)) : null),
+      section('على مستوى المنطقة', lvl.region ? h('p', { class: 'sh-text' }, cites(lvl.region, d, dom)) : null),
+      section('على مستوى العالم', lvl.world ? h('p', { class: 'sh-text' }, cites(lvl.world, d, dom)) : null),
+      section('أين تتقاطع المستويات', dom.comparison ? h('p', { class: 'sh-text' }, cites(dom.comparison, d, dom)) : null),
+      section('أبرز التطورات', kd.length ? h('div', { class: 'kd-list' }, kd) : null),
+      section('انعكاسات على الإمارات', list(dom.uae_implications, d, dom)),
+      section('المخاطر', list(dom.risks, d, dom)),
+      section('الفرص', list(dom.opportunities, d, dom)),
+      section('أثر الأسواق', list(dom.market_impact, d, dom)),
+      section('النظرة للأسبوعين المقبلين', dom.outlook ? h('p', { class: 'sh-text' }, cites(dom.outlook, d, dom)) : null),
+      section('ما يُراقَب', list(dom.watch_list, d, dom))));
+    return det;
+  }
+
+  function openRadar(focus) {
+    var R = radarNow(), V = visible(), bp = bigPictureFor(V);
+    if (!R || !bp) return;
+    var ex = R.executive || {}, figs = (R.figures || []).map(function (f) {
+      var arrow = f.dir === 'up' ? '▲' : (f.dir === 'down' ? '▼' : '');
+      return h('div', { class: 'fig ' + (f.dir || 'flat') }, h('small', null, f.label),
+        h('b', { dir: 'ltr', style: 'unicode-bidi:isolate' }, f.value),
+        f.change ? h('i', null, (arrow ? arrow + ' ' : '') + f.change) : null);
+    });
+    var focusKey = DOMAIN_KEYS.indexOf(focus) >= 0 ? focus : null;
+    var dets = DOMAIN_KEYS.filter(function (d) { return R.domains[d]; }).map(function (d) { return domainDetails(d, R.domains[d], d === focusKey); });
+    openSheet(h('div', { class: 'an-sheet' },
+      h('h3', { class: 'sh-title', id: 'sheetTitle' }, bp.title),
+      h('div', { class: 'sh-meta' }, radarBadge(), R.label_ar ? h('span', { class: 'chip' }, R.label_ar) : null),
+      h('p', { class: 'sh-text' }, ex.overview || bp.summary),
+      section('أولويات صانع القرار', list(ex.top_priorities)),
+      section('ترابط التطورات', list(ex.cross_links)),
+      section('خلال 48 ساعة', list(ex.next_48h)),
+      section('ما الذي تغيّر منذ الإصدار السابق', list(R.changes_since_last)),
+      section('أرقام اليوم', figs.length ? h('div', { class: 'fig-grid' }, figs) : null),
+      h('h4', { class: 'sh-h' }, 'التحليل المتكامل'),
+      dets));
+    if (focusKey) {
+      var el = $('sheetBody').querySelector('details[data-d="' + focusKey + '"]');
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' });
+    }
+  }
+
   function openBigPicture() {
     var V = visible(), bp = bigPictureFor(V);
     if (!bp) return;
+    if (bp.radar) { openRadar(); return; }
     var an = analysisFor(V);
     openSheet(h('div', { class: 'an-sheet' },
       h('h3', { class: 'sh-title', id: 'sheetTitle' }, bp.title),
@@ -424,6 +564,8 @@
       state.items = data.items;
       state.loaded = true;
       state.fetchedAt = data.stale ? (Date.parse(data.generated_at) || state.fetchedAt) : Date.now();
+      state.radar = (data.radar && data.radar.domains) ? data.radar : null;
+      if (state.radar) lsSet(LS.radar, state.radar); else lsDel(LS.radar);
       lsSet(LS.news(hours), { items: data.items.slice(0, 80), fetchedAt: state.fetchedAt });
       render();
       if (data.stale) toast('المصادر غير متاحة الآن، نعرض آخر نسخة محفوظة', true);
@@ -446,8 +588,8 @@
   // opinion on the impact of the top stories. Each part is optional: whatever fails simply keeps its local fallback.
   function runAI(id, hours) {
     var need = state.items.filter(function (i) { return !titleOf(i); }).slice(0, 30);
-    var top = visible().slice(0, 25);
-    var wantAn = top.length >= 3;
+    var top = visible().filter(function (i) { return !i.radar; }).slice(0, 25);
+    var wantAn = !radarNow() && top.length >= 3;
     var ids = top.map(function (i) { return i.id; }).sort();
     var cached = lsGet(LS.ai(hours));
     // the saved analysis is reused while it still covers most of the current top stories (items translated by the
@@ -543,7 +685,7 @@
       location.reload();
     });
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/sw.js?v=1.0.3', { updateViaCache: 'none' }).then(function (reg) {
+      navigator.serviceWorker.register('/sw.js?v=1.1.0', { updateViaCache: 'none' }).then(function (reg) {
         reg.update().catch(function () {});
       }).catch(function () {});
     });
@@ -554,6 +696,7 @@
     var savedHours = lsGet(LS.hours);
     if (HOURS.indexOf(savedHours) >= 0) state.hours = savedHours;
     state.tr = lsGet(LS.tr) || {};
+    state.radar = lsGet(LS.radar);
     loadCached(state.hours);
     state.ai = freshAI(state.hours);
     bind();

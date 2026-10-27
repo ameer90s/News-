@@ -1,4 +1,4 @@
-/* مرصد الإمارات الذكي — v1.0.3 */
+/* مرصد الإمارات الذكي — v1.1.0 */
 
 /* BG-LOCK-START */
 html{background:#040a1a}
@@ -217,6 +217,42 @@ dialog::backdrop{background:rgba(2,6,16,.6);-webkit-backdrop-filter:blur(3px);ba
 .tag.k-official{border-color:rgba(143,208,255,.65);color:#cfe8ff}
 .src span{display:block;margin-top:3px;font-size:12px;line-height:1.6;color:var(--ink3);unicode-bidi:plaintext;text-align:start}
 .an-sheet .an{margin-top:8px}
+
+/* ----------------------------------------------------------- radar edition */
+.badge-radar{background:rgba(24,110,170,.26);border-color:rgba(120,200,255,.6);color:#cdeaff}
+.chip-radar{border-color:rgba(120,200,255,.6);color:#cdeaff;background:rgba(24,110,170,.22)}
+.an.tap{cursor:pointer}
+.an.tap:active{background:rgba(20,50,110,.45)}
+.an .more{display:inline-flex;align-items:center;gap:3px;margin-top:4px;font-size:11.5px;font-weight:800;color:var(--blue)}
+.an .more .ic{width:12px;height:12px}
+.sh-back{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 10px;margin:2px 0 8px;margin-inline-start:40px;border-radius:999px;border:1px solid var(--line);background:rgba(10,26,62,.6);font-size:11.5px;font-weight:700;color:var(--blue)}
+.sh-back .ic{width:13px;height:13px;transform:scaleX(-1)}
+.rd-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px}
+.rd-list li{position:relative;padding-inline-start:14px;font-size:13px;line-height:1.8;color:var(--ink2)}
+.rd-list li::before{content:"";position:absolute;inset-inline-start:2px;top:.85em;width:5px;height:5px;border-radius:50%;background:var(--blue2)}
+.cite{display:inline-grid;place-items:center;min-width:20px;height:18px;padding:0 4px;margin:0 2px;border-radius:6px;border:1px solid rgba(143,208,255,.55);background:rgba(77,163,255,.16);color:#cfe8ff;font-size:11px;font-weight:800;line-height:1;vertical-align:baseline}
+.cite.off{opacity:.5}
+.fig-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.fig{padding:7px 9px;border-radius:12px;border:1px solid rgba(160,205,255,.2);background:rgba(8,20,48,.5);min-width:0}
+.fig small{display:block;font-size:11px;line-height:1.5;color:var(--ink3)}
+.fig b{font-size:14px;font-weight:800}
+.fig i{display:inline-block;font-style:normal;font-size:11.5px;font-weight:700;margin-inline-start:6px;direction:ltr;unicode-bidi:isolate}
+.fig.up i{color:rgb(var(--lv-low))}
+.fig.down i{color:rgb(var(--lv-high))}
+.dd{margin-top:8px;border-radius:14px;border:1px solid rgba(160,205,255,.22);background:rgba(6,16,42,.42)}
+.dd>summary{list-style:none;display:flex;align-items:center;gap:7px;padding:10px 11px;cursor:pointer;font-size:14px;font-weight:800}
+.dd>summary::-webkit-details-marker{display:none}
+.dd>summary .ic{width:17px;height:17px;color:var(--blue2)}
+.dd>summary .chip{height:22px;font-size:11px;padding:0 8px}
+.dd>summary .chev{margin-inline-start:auto;transition:transform .2s}
+.dd[open]>summary .chev{transform:rotate(-90deg)}
+.dd-body{padding:0 11px 12px}
+.dd-head{font-size:13.5px;font-weight:800;line-height:1.8;color:var(--ink);margin-bottom:4px}
+.dd-conf{font-size:11.5px;color:var(--ink3);margin-bottom:2px}
+.kd-list{display:flex;flex-direction:column;gap:6px}
+.kd{display:block;width:100%;text-align:start;padding:8px 10px;border-radius:12px;border:1px solid rgba(122,172,255,.16);background:rgba(8,20,48,.5)}
+.kd b{display:block;font-size:12.5px;font-weight:800;line-height:1.6}
+.kd span{display:block;margin-top:2px;font-size:12px;line-height:1.7;color:var(--ink3)}
 
 /* ------------------------------------------------------------ small phones */
 @media (max-width:380px){

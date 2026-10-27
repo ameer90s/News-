@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi import FastAPI, Request  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 
-from core import ai, sources  # noqa: E402
+from core import ai, radar, sources  # noqa: E402
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -62,7 +62,7 @@ async def api_enrich(request: Request):
 
 @app.get("/api/health")
 async def api_health():
-    return _json({"ok": True, "ai_configured": ai.configured(), "model": ai.model_name()})
+    return _json({"ok": True, "ai_configured": ai.configured(), "model": ai.model_name(), "radar": radar.status()})
 
 
 # --------------------------------------------------------------------------- path-agnostic fallback
