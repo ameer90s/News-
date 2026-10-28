@@ -1,9 +1,11 @@
-/* مرصد الإمارات الذكي — v1.1.0 */
+/* مرصد الإمارات الذكي — v1.2.1 */
 (function () {
   'use strict';
 
   var HOURS = [6, 12, 24, 48, 72];
   var DUP_MAX = 12;      // a story that repeats a better-ranked one by this much is hidden from the «مؤثرة» tab
+  var KEEP_MIN = 34;     // an earlier headline that the new answer no longer lists is kept while it is still inside the window if its impact is at least this (mid / high)
+  var KEEP_MAX = 100;    // most headlines stored per window
   var IMPACT_MIN = 55;   // «مؤثرة» tab: stories whose potential impact on the UAE is at least this, wherever they happen
   var DOMAINS = {
     political: { name: 'سياسي', icon: 'i-bank' },
@@ -20,6 +22,7 @@
     radar: 'mirsad.radar',
     hours: 'mirsad.hours',
     tr: 'mirsad.tr',
+    theme: 'mirsad.theme',
     news: function (h) { return 'mirsad.news.' + h; },
     ai: function (h) { return 'mirsad.ai.' + h; }
   };
@@ -110,6 +113,51 @@
     return n + ' ' + (n <= 10 ? few : many);
   }
 
+  /* ------------------------------------------------- keep what the last update found */
+  // Each update asks for the whole window again, but an answer is never complete (a source can be slow or cut, a query returns a
+  // limited number of rows). A headline that was on the page and is still inside the window is therefore kept when the new
+  // answer does not list it, unless the new answer already has the same story under another headline. Importance is re-aged
+  // (recency counts 20 points over the window, as on the server) so old finds do not outrank fresh ones.
+  function normAr(t) {
+    return String(t || '').replace(/[\u064B-\u0652\u0640]/g, '').replace(/[\u0623\u0625\u0622]/g, '\u0627').replace(/\u0649/g, '\u064A').replace(/\u0629/g, '\u0647').toLowerCase();
+  }
+  function tokenSet(t) {
+    var out = {}, m = normAr(t).match(/[\u0600-\u06FFa-z0-9]+/g) || [];
+    m.forEach(function (w) {
+      if (w.indexOf('\u0627\u0644') === 0 && w.length > 4) w = w.slice(2);
+      if (w.length >= 3 || (/^\d+$/.test(w) && w.length === 2)) out[w] = 1;
+    });
+    return out;
+  }
+  function sameStory(a, b) {
+    var na = Object.keys(a).length, nb = Object.keys(b).length;
+    if (na < 3 || nb < 3) return false;
+    var shared = 0;
+    Object.keys(a).forEach(function (k) { if (b[k]) shared++; });
+    var j = shared / (na + nb - shared);
+    return j >= 0.4 || (shared >= 4 && j >= 0.3);
+  }
+  function mergeKept(incoming, previous, prevAt, hours) {
+    if (!previous || !previous.length) return incoming;
+    var now = Date.now(), cutoff = now - hours * 3600 * 1000, have = {}, sets = [];
+    incoming.forEach(function (i) {
+      have[i.id] = 1;
+      sets.push(tokenSet(titleOf(i) || i.title || ''));
+      (i.sources || []).forEach(function (s) { if (s.title) sets.push(tokenSet(s.title)); });
+    });
+    var aged = Math.max(0, now - (prevAt || now)) / (hours * 3600 * 1000) * 20, kept = [];
+    previous.forEach(function (p) {
+      if (have[p.id] || p.radar || !(p.uae_impact >= KEEP_MIN) || !(Date.parse(p.published) >= cutoff)) return;
+      var t = titleOf(p);
+      if (!t) return;
+      var ts = tokenSet(t);
+      for (var k = 0; k < sets.length; k++) if (sameStory(ts, sets[k])) return;
+      kept.push(Object.assign({}, p, { importance: (p.importance || 0) - aged, kept: true }));
+    });
+    if (!kept.length) return incoming;
+    return incoming.concat(kept).sort(function (x, y) { return y.importance - x.importance; }).slice(0, KEEP_MAX + 20);
+  }
+
   /* ---------------------------------------------------------------- clock */
   var clockFmt = null;
   try {
@@ -187,11 +235,15 @@
   }
 
   /* ------------------------------------------------------------ radar edition */
-  // «رادار الأخبار»: while an edition is fresh its executive overview and per-domain analysis feed the big picture and the
+  // «رادار الأخبار»: while an edition is fresh (and inside the selected window) its executive overview and per-domain analysis feed the big picture and the
   // integrated analysis (same places, same cards); its stories arrive as ordinary news items flagged radar:true.
+  // The edition feeds the big picture, the analysis and the «التحليل الكامل» sheet only while it lies inside the selected news
+  // window (the same rule that decides whether its stories are listed). A 6-hour view never shows a morning edition's overview.
   function radarNow() {
     var r = state.radar;
-    return (r && r.domains && Date.now() - Date.parse(r.created_at) < RADAR_MAX_AGE) ? r : null;
+    if (!r || !r.domains) return null;
+    var age = Date.now() - Date.parse(r.created_at);
+    return (age < RADAR_MAX_AGE && age <= state.hours * 3600 * 1000) ? r : null;
   }
   function stripRefs(t) { return String(t || '').replace(/\s*\[\d+(?:\s*[,،]\s*\d+)*\]/g, '').replace(/\s+([،.؛:)])/g, '$1').trim(); }
   function radarTime(r) { var m = /·\s*([\d:]+)\s*$/.exec(r.label_ar || ''); return m ? m[1] : ''; }
@@ -216,8 +268,17 @@
     var tail = { high: 'التأثير المحتمل على الإمارات مرتفع ويستدعي المتابعة الدقيقة.', mid: 'التأثير المحتمل على الإمارات متوسط ويستحق المتابعة.', low: 'التأثير المحتمل على الإمارات محدود حاليًا.', none: '' }[lv];
     return 'عدد الأخبار المرصودة: ' + stat.list.length + '. الأعلى تأثيرًا: «' + stat.top.title + '». ' + tail;
   }
+  // Order of preference: Gemini's analysis of the current list («تحليل ذكي AI», badge only when the text really is Gemini's),
+  // then the Radar edition's own analysis (badge «رادار الأخبار»), then the local text. While an edition is fresh every
+  // analysis block opens the Radar's full analysis of that domain.
   function analysisFor(V) {
     var stats = domainStats(V), rd = radarNow();
+    var ai = state.ai && state.ai.analysis;
+    if (ai && DOMAIN_KEYS.every(function (d) { return ai[d]; })) {
+      return { rows: DOMAIN_KEYS.map(function (d) {
+        return { d: d, impact: stats[d].impact, text: ai[d].text, radar: !!(rd && rd.domains[d]), deep: true };
+      }), ai: true, stats: stats };
+    }
     if (rd) {
       var rrows = DOMAIN_KEYS.map(function (d) {
         var dd = rd.domains[d];
@@ -225,17 +286,13 @@
       });
       return { rows: rrows, ai: false, radar: true, stats: stats };
     }
-    var ai = state.ai && state.ai.analysis;
-    var complete = !!(ai && DOMAIN_KEYS.every(function (d) { return ai[d]; }));
-    var rows = DOMAIN_KEYS.map(function (d) {
-      return { d: d, impact: stats[d].impact, text: complete ? ai[d].text : localDomainText(d, stats[d]) };
-    });
-    return { rows: rows, ai: complete, stats: stats };
+    var rows = DOMAIN_KEYS.map(function (d) { return { d: d, impact: stats[d].impact, text: localDomainText(d, stats[d]) }; });
+    return { rows: rows, ai: false, stats: stats };
   }
   function bigPictureFor(V) {
     var rd = radarNow();
-    if (rd && rd.executive && rd.executive.overview) { var lead = radarLead(rd); return { title: lead.title, summary: lead.summary, ai: false, radar: true }; }
     if (state.ai && state.ai.big_picture) return { title: state.ai.big_picture.title, summary: state.ai.big_picture.summary, ai: true };
+    if (rd && rd.executive && rd.executive.overview) { var lead = radarLead(rd); return { title: lead.title, summary: lead.summary, ai: false, radar: true }; }
     if (!V.length) return null;
     var stats = domainStats(V), best = null;
     DOMAIN_KEYS.forEach(function (d) { if (stats[d].impact != null && (!best || stats[d].impact > stats[best].impact)) best = d; });
@@ -259,16 +316,23 @@
     renderControls();
   }
 
+  function renderBpSrc() {
+    var rd = radarNow(), tm = rd ? radarTime(rd) : '';
+    $('bpSrc').textContent = rd ? '· نشرة رادار الأخبار' + (tm ? ' ' + tm : '') : '';
+  }
+
   function renderHero(V) {
     var t = $('bpTitle'), s = $('bpSummary'), slot = $('bpAi');
     slot.replaceChildren();
     if (!state.loaded && !V.length) {
+      renderBpSrc();
       t.replaceChildren(skel(20, '85%'));
       s.replaceChildren(skel(14, '100%'), skel(14, '92%'));
       s.style.display = 'block';
       return;
     }
     s.style.display = '';
+    renderBpSrc();
     var bp = bigPictureFor(V);
     if (!bp) {
       t.textContent = 'لا توجد أخبار لعرضها حاليًا';
@@ -282,13 +346,15 @@
   }
 
   function domainCard(d, st) {
-    var lv = level(st.impact), n = { low: 1, mid: 2, high: 3, none: 0 }[lv];
-    var bars = h('span', { class: 'meter' });
-    for (var i = 0; i < 3; i++) bars.appendChild(h('i', { class: i < n ? 'f' : '' }));
+    var lv = level(st.impact), has = st.impact != null;
+    var gauge = h('div', { class: 'gauge' }, h('i'));
+    gauge.firstChild.style.width = (has ? Math.max(0, Math.min(100, Math.round(st.impact))) : 0) + '%';
     return h('div', { class: 'dom lv-' + lv },
       h('div', { class: 'dom-top' }, icon(DOMAINS[d].icon), h('span', { class: 'dom-name' }, DOMAINS[d].name)),
-      h('div', { class: 'dom-lvl' }, h('b', null, LEVEL_AR[lv]), bars),
-      h('div', { class: 'dom-val' }, 'التأثير: ', st.impact == null ? h('b', null, '—') : h('b', null, pct(st.impact)))
+      h('div', { class: 'dom-cap' }, 'التأثير: '),
+      h('div', { class: 'dom-val' }, has ? h('span', { dir: 'ltr', style: 'unicode-bidi:isolate' }, h('b', null, Math.round(st.impact)), h('i', null, '%')) : h('b', null, '—')),
+      gauge,
+      h('div', { class: 'dom-lvl' }, LEVEL_AR[lv])
     );
   }
   function renderDomains(V) {
@@ -306,14 +372,20 @@
   function row(it, withScope) {
     var lv = level(it.uae_impact);
     var src = it.sources && it.sources[0] ? it.sources[0].name : '';
-    if (withScope && SCOPES[it.scope]) src = SCOPES[it.scope] + ' • ' + src;
+    var when = it.radar && it.when ? it.when : ago(it.published);
+    var scopeName = withScope && SCOPES[it.scope] ? SCOPES[it.scope] : '';
+    // «مؤثرة» only: the story's scope is a small pill in front of «source • time» (the bullet after it stays in the text, hidden)
+    var meta = h('span', { class: 'row-meta' },
+      scopeName ? h('i', { class: 'sc' }, scopeName) : null,
+      scopeName ? h('span', { class: 'sep' }, ' • ') : null,
+      src + ' • ' + when);
     return h('button', { class: 'row', type: 'button', 'data-scope': it.scope, 'data-domain': it.domain, onclick: function () { openItem(it); } },
       thumb(it),
       h('span', { class: 'row-main' },
         h('span', { class: 'row-title' }, it.title),
-        h('span', { class: 'row-meta', style: 'display:block' }, src + ' • ' + (it.radar && it.when ? it.when : ago(it.published)))
+        meta
       ),
-      h('span', { class: 'imp lv-' + lv }, h('small', null, LEVEL_AR[lv]), h('b', null, pct(it.uae_impact)))
+      h('span', { class: 'imp lv-' + lv }, h('b', null, pct(it.uae_impact)), h('small', null, LEVEL_AR[lv]))
     );
   }
   function fillList(el, items, emptyMsg, withScope) {
@@ -355,10 +427,10 @@
     var open = r.radar ? function () { openRadar(r.d); } : null;
     return h('div', { class: 'an' + (open ? ' tap' : ''), role: open ? 'button' : null, tabindex: open ? '0' : null,
         onclick: open, onkeydown: open ? function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } } : null },
-      h('div', { class: 'an-head' }, icon(DOMAINS[r.d].icon), h('b', null, DOMAINS[r.d].name),
-        r.impact == null ? null : h('span', { class: 'imp lv-' + lv }, h('small', null, LEVEL_AR[lv]), h('b', null, pct(r.impact)))),
+      h('div', { class: 'an-head' }, h('span', { class: 'ach' }, icon(DOMAINS[r.d].icon)), h('b', null, DOMAINS[r.d].name),
+        r.impact == null ? null : h('span', { class: 'imp lv-' + lv }, h('b', null, pct(r.impact)), h('small', null, LEVEL_AR[lv]))),
       h('p', null, r.text),
-      open ? h('span', { class: 'more' }, 'التحليل الكامل', icon('i-left')) : null);
+      open ? h('span', { class: 'more' }, r.deep ? 'تحليل الرادار الكامل' : 'التحليل الكامل', icon('i-left')) : null);
   }
 
   function renderControls() {
@@ -470,8 +542,8 @@
   }
 
   function openRadar(focus) {
-    var R = radarNow(), V = visible(), bp = bigPictureFor(V);
-    if (!R || !bp) return;
+    var R = radarNow(), V = visible(), lead = R ? radarLead(R) : null;
+    if (!R || !lead) return;
     var ex = R.executive || {}, figs = (R.figures || []).map(function (f) {
       var arrow = f.dir === 'up' ? '▲' : (f.dir === 'down' ? '▼' : '');
       return h('div', { class: 'fig ' + (f.dir || 'flat') }, h('small', null, f.label),
@@ -481,9 +553,9 @@
     var focusKey = DOMAIN_KEYS.indexOf(focus) >= 0 ? focus : null;
     var dets = DOMAIN_KEYS.filter(function (d) { return R.domains[d]; }).map(function (d) { return domainDetails(d, R.domains[d], d === focusKey); });
     openSheet(h('div', { class: 'an-sheet' },
-      h('h3', { class: 'sh-title', id: 'sheetTitle' }, bp.title),
+      h('h3', { class: 'sh-title', id: 'sheetTitle' }, lead.title),
       h('div', { class: 'sh-meta' }, radarBadge(), R.label_ar ? h('span', { class: 'chip' }, R.label_ar) : null),
-      h('p', { class: 'sh-text' }, ex.overview || bp.summary),
+      h('p', { class: 'sh-text' }, ex.overview || lead.summary),
       section('أولويات صانع القرار', list(ex.top_priorities)),
       section('ترابط التطورات', list(ex.cross_links)),
       section('خلال 48 ساعة', list(ex.next_48h)),
@@ -500,7 +572,7 @@
   function openBigPicture() {
     var V = visible(), bp = bigPictureFor(V);
     if (!bp) return;
-    if (bp.radar) { openRadar(); return; }
+    if (radarNow()) { openRadar(); return; }      // the edition is the full analysis (also when the text above is Gemini's)
     var an = analysisFor(V);
     openSheet(h('div', { class: 'an-sheet' },
       h('h3', { class: 'sh-title', id: 'sheetTitle' }, bp.title),
@@ -508,6 +580,23 @@
       h('p', { class: 'sh-text' }, bp.summary),
       h('h4', { class: 'sh-h' }, 'التحليل المتكامل'),
       an.rows.map(analysisBlock)));
+  }
+
+  /* ------------------------------------------------------------------ theme */
+  // نهار / ليل: only a data-theme attribute on <html> (the colours live in style.css); the choice is remembered on this device
+  function applyTheme(t, save) {
+    var night = t === 'night';
+    document.documentElement.setAttribute('data-theme', night ? 'night' : 'day');
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', night ? '#4a38c0' : '#dff2ff');
+    var b = $('themeBtn');
+    b.setAttribute('aria-label', night ? 'التبديل إلى الوضع النهاري' : 'التبديل إلى الوضع الليلي');
+    b.setAttribute('aria-pressed', night ? 'true' : 'false');
+    b.firstChild.firstChild.setAttribute('href', night ? '#i-sun' : '#i-moon');
+    if (save) lsSet(LS.theme, night ? 'night' : 'day');
+  }
+  function toggleTheme() {
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'night' ? 'day' : 'night', true);
   }
 
   /* ------------------------------------------------------------------ toast */
@@ -558,15 +647,16 @@
   function refresh() {
     var hours = state.hours, id = ++state.reqId;
     setBusy(true);
-    return fetchJSON('/api/news?hours=' + hours, null, 15000).then(function (data) {
+    // no short cut-off: the server itself waits for every source up to the platform limit (~25s); this 35s is only a safety net so the button can never stay locked
+    return fetchJSON('/api/news?hours=' + hours, null, 35000).then(function (data) {
       if (id !== state.reqId) return;
       if (!data || !Array.isArray(data.items)) throw new Error('bad payload');
-      state.items = data.items;
+      state.items = mergeKept(data.items, state.items, state.fetchedAt, hours);
       state.loaded = true;
       state.fetchedAt = data.stale ? (Date.parse(data.generated_at) || state.fetchedAt) : Date.now();
       state.radar = (data.radar && data.radar.domains) ? data.radar : null;
       if (state.radar) lsSet(LS.radar, state.radar); else lsDel(LS.radar);
-      lsSet(LS.news(hours), { items: data.items.slice(0, 80), fetchedAt: state.fetchedAt });
+      lsSet(LS.news(hours), { items: state.items.slice(0, KEEP_MAX), fetchedAt: state.fetchedAt });
       render();
       if (data.stale) toast('المصادر غير متاحة الآن، نعرض آخر نسخة محفوظة', true);
       runAI(id, hours);
@@ -588,8 +678,8 @@
   // opinion on the impact of the top stories. Each part is optional: whatever fails simply keeps its local fallback.
   function runAI(id, hours) {
     var need = state.items.filter(function (i) { return !titleOf(i); }).slice(0, 30);
-    var top = visible().filter(function (i) { return !i.radar; }).slice(0, 25);
-    var wantAn = !radarNow() && top.length >= 3;
+    var top = visible().slice(0, 25);       // Radar stories are included as context; their impact is never re-scored
+    var wantAn = top.length >= 3;
     var ids = top.map(function (i) { return i.id; }).sort();
     var cached = lsGet(LS.ai(hours));
     // the saved analysis is reused while it still covers most of the current top stories (items translated by the
@@ -605,7 +695,7 @@
     post('/api/enrich', {
       hours: hours,
       translate: need.map(function (i) { return { id: i.id, title: (i.sources[0] || {}).title || '' }; }),
-      items: wantAn ? top.map(function (i) { return { id: i.id, title: i.title, scope: i.scope, domain: i.domain, uae_impact: i.impact0 }; }) : []
+      items: wantAn ? top.map(function (i) { return { id: i.id, title: i.title, scope: i.scope, domain: i.domain, uae_impact: i.impact0, radar: !!i.radar }; }) : []
     }, 29000).then(function (res) {
       if (!res || !res.ok) throw new Error('no ai');
       var keys = Object.keys(res.translations || {});
@@ -654,6 +744,7 @@
   function bind() {
     $('refreshBtn').addEventListener('click', function () { if (!state.busy) refresh(); });
     $('shareBtn').addEventListener('click', share);
+    $('themeBtn').addEventListener('click', toggleTheme);
     $('bpMore').addEventListener('click', openBigPicture);
     $('ranges').addEventListener('click', function (e) {
       var b = e.target.closest('button[data-h]');
@@ -685,7 +776,7 @@
       location.reload();
     });
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/sw.js?v=1.1.0', { updateViaCache: 'none' }).then(function (reg) {
+      navigator.serviceWorker.register('/sw.js?v=1.2.1', { updateViaCache: 'none' }).then(function (reg) {
         reg.update().catch(function () {});
       }).catch(function () {});
     });
@@ -695,6 +786,7 @@
   function init() {
     var savedHours = lsGet(LS.hours);
     if (HOURS.indexOf(savedHours) >= 0) state.hours = savedHours;
+    applyTheme(lsGet(LS.theme) === 'night' ? 'night' : 'day', false);
     state.tr = lsGet(LS.tr) || {};
     state.radar = lsGet(LS.radar);
     loadCached(state.hours);

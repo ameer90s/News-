@@ -1,11 +1,12 @@
 /* مرصد الإمارات الذكي — Service Worker. ارفع VERSION مع كل إصدار (tools/bump_version.py). */
-const VERSION = '1.1.0';
+const VERSION = '1.2.1';
 const CACHE = 'mirsad-' + VERSION;
 const SHELL = [
   '/',
   '/style.css?v=' + VERSION,
   '/app.js?v=' + VERSION,
-  '/bg-news.svg'
+  '/bg-day.svg',
+  '/bg-night.svg'
 ];
 
 self.addEventListener('install', (event) => {

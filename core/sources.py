@@ -32,12 +32,11 @@ GDELT_URL = os.environ.get("GDELT_URL", "https://api.gdeltproject.org/api/v2/doc
 GNEWS_URL = os.environ.get("GNEWS_URL", "https://news.google.com/rss/search")
 GNEWS_CONCURRENCY = 6   # Google News is polite-limited: never fire all the site: queries at once
 
-FETCH_TIMEOUT = 9.0     # per upstream request (seconds)
-DEADLINE = 12.5         # whole collection; the browser gives up at ~15s
+FETCH_TIMEOUT = 20.0    # per upstream request (seconds)
+DEADLINE = 24.0         # whole collection: waits for every source up to the platform limit (functions stop at 30s, see vercel.json), leaving ~6s to rank and answer
 NEWS_TTL = int(os.environ.get("NEWS_TTL", "90"))   # seconds of in-memory caching per window
 MAX_ITEMS = 120
 MAX_STORY = 12          # most headlines merged into one developing story
-RADAR_BONUS = 12.0       # importance added to a story the Radar selected (it read the articles; the live feed only saw headlines)
 RADAR_MARGIN = 0.05      # a live story joins a Radar story only if it matches it this much better than any other Radar story
 RADAR_MATCH = 140       # characters of a Radar story's summary used (with its title) to recognise live headlines about it
 MAX_TRANSLATE = 30
@@ -423,6 +422,9 @@ def _same_event(a: dict, b: dict, cos: float, shared: frozenset) -> bool:
 DIV_MAX = 30.0          # most a near-duplicate can lose in importance
 DIV_LO, DIV_HI = 0.06, 0.22
 DIV_WINDOW = 40         # compare each story with the 40 best-ranked ones above it
+SUPERSEDE_H = 4.0       # a live story this much newer than a Radar-only story on the same subject replaces it
+RADAR_STALE = 10.0      # importance a Radar-only story (no live headline matched) loses as its edition ages: the more hours pass
+                        # without the live feed repeating it, the less likely it is still news (full effect after 24 h)
 
 
 def _iso(dt: datetime) -> str:
@@ -590,7 +592,7 @@ def build_items(raw: list[dict], hours: int, now: datetime) -> list[dict]:
 
     groups: list[dict] = []
     root_group: dict[int, dict] = {}
-    for i, c in enumerate(cands):          # cands are ordered Radar-first, Arabic-first, newest-first: the first member is the headline
+    for i, c in enumerate(cands):          # cands are ordered Radar-first (only so the Radar's Arabic title becomes the headline), Arabic-first, newest-first
         key = c["key"]
         reg = REG.lookup(c.get("host"))
         src = {"name": reg[1] if reg else c["source"], "url": c["url"], "title": c["title"], "lang": c["lang"],
@@ -623,13 +625,20 @@ def build_items(raw: list[dict], hours: int, now: datetime) -> list[dict]:
     items = []
     for g in groups:
         n = len(g["sources"])
+        rank_src = g["sources"]
+        if g.get("radar"):
+            # A Radar story cites the sources of a past edition; only today's live headlines count as coverage when the
+            # story is ranked, so it competes with the live news on the same terms (a lone headline counts as one source).
+            live_names = {(REG.lookup(m.get("host")) or (None, m["source"]))[1] for m in g["members"] if not m.get("radar")}
+            rank_src = g["sources"][:1] + [s for s in g["sources"][1:] if s["name"] in live_names]
+        n_rank = max(1, len(live_names) if g.get("radar") else n)
         updates = len(g["keys"])
         span_h = (g["published"] - g["first"]).total_seconds() / 3600.0
         # the story is judged by its most telling headline; the newest headline is the one shown
         best = None
         for t in g["titles"]:
             sc = C.classify_scope(t, g["hint"])
-            imp, why = C.assess(t, sc, n)
+            imp, why = C.assess(t, sc, n_rank)
             if best is None or imp > best[0]:
                 best = (imp, why, sc, t)
         impact, why, scope, best_title = best
@@ -637,7 +646,7 @@ def build_items(raw: list[dict], hours: int, now: datetime) -> list[dict]:
         rd = g.get("radar")
         if rd:                             # the Radar already classified and judged this story
             scope, domain = rd["scope"], rd["domain"]
-            impact, why = RADAR.impact_of(rd, n)
+            impact, why = RADAR.impact_of(rd, n_rank)
         # a story that keeps developing (several updates over many hours) gains weight
         story = 0.0
         if updates >= 3:
@@ -652,22 +661,33 @@ def build_items(raw: list[dict], hours: int, now: datetime) -> list[dict]:
             "uae_impact": impact,
             "why": why,
             "updates": updates,
-            "importance": C.importance(impact, g["published"], now, hours, n,
-                                       max((REG.trust_bonus(s["kind"]) for s in g["sources"]), default=0.0), story),
+            "importance": C.importance(impact, g["published"], now, hours, n_rank,
+                                       max((REG.trust_bonus(s["kind"]) for s in rank_src), default=0.0), story),
             "sources": g["sources"][:6],
             "_m": ([g["radar_c"]["tpseudo"]] if rd else []) + g["members"][:3],
+            "_ro": bool(rd) and not live_names,        # a story that only the Radar edition reports (no live headline matched)
+            "_t": g["published"],
         })
         if rd:
             items[-1].update(radar=True, summary=rd["summary"], when=rd["when"], ref=rd["ref"])
-            items[-1]["importance"] = round(items[-1]["importance"] + RADAR_BONUS + (4.0 if rd["key_dev"] else 0.0), 2)
+            # no extra rank for Radar stories: they compete with the live news on the same terms (impact, recency,
+            # sources) so the page leads with what is happening now, not with yesterday's edition
+            if not live_names:
+                age_h = max((now - g["published"]).total_seconds() / 3600.0, 0.0)
+                items[-1]["importance"] = round(items[-1]["importance"] - RADAR_STALE * min(1.0, age_h / 24.0), 2)
     items.sort(key=lambda i: i["importance"], reverse=True)
 
     # Diversity: a story that closely resembles one ranked above it (same subject, another angle or another outlet that
     # was not merged) loses importance in proportion to the resemblance, so the top of every list shows different events.
     kept: list[dict] = []
+    older: dict[int, float] = {}          # id(item) -> resemblance to a clearly NEWER story (it is the superseded one)
     for it in items:
         m = 0.0
         for k in kept[:DIV_WINDOW]:
+            # today's story about a subject yesterday's Radar edition also covered is not a repeat of it: the older
+            # edition story gives way instead (below), so the fresh news is never pushed down by a day-old summary
+            supersedes = k["_ro"] and (it["_t"] - k["_t"]).total_seconds() >= SUPERSEDE_H * 3600
+            mm = 0.0
             for a in it["_m"]:
                 if a.get("tp") and k.get("radar"):      # two Radar stories are compared by title + summary: their short
                     continue                           # titles share place names too easily (Tehran, Riyadh) to say anything
@@ -677,14 +697,24 @@ def build_items(raw: list[dict], hours: int, now: datetime) -> list[dict]:
                     cs, _sh = space.cos(a, b)
                     if (a.get("tp") or b.get("tp")) and (len(_sh) < 3 or (a["lang"] == "ar") != (b["lang"] == "ar")):
                         continue            # a short Radar title says little unless 3+ words are shared, in the same language
-                    if cs > m:
-                        m = cs
+                    if cs > mm:
+                        mm = cs
+            if supersedes:
+                older[id(k)] = max(older.get(id(k), 0.0), mm)
+            elif mm > m:
+                m = mm
         pen = DIV_MAX * min(1.0, max(0.0, (m - DIV_LO) / (DIV_HI - DIV_LO)))
         it["importance"] = round(it["importance"] - pen, 2)
         it["dup"] = round(pen)            # how much it repeats a better-ranked story (0 = distinct)
         kept.append(it)
+    for it in kept:
+        m = older.get(id(it), 0.0)
+        if m > 0.0:
+            pen = DIV_MAX * min(1.0, max(0.0, (m - DIV_LO) / (DIV_HI - DIV_LO)))
+            it["importance"] = round(it["importance"] - pen, 2)
+            it["dup"] = max(it["dup"], round(pen))
     for it in items:
-        del it["_m"]
+        del it["_m"], it["_ro"], it["_t"]
     items.sort(key=lambda i: i["importance"], reverse=True)
     return items[:MAX_ITEMS]
 

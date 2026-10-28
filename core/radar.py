@@ -27,6 +27,7 @@ from . import registry as REG
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RADAR_FILE = os.environ.get("RADAR_FILE") or os.path.join(ROOT, "data", "radar", "latest.json")
 MAX_AGE_H = float(os.environ.get("RADAR_MAX_AGE_H", "36"))
+BONUS_MAX = 10           # most the Radar's own analysis may add to a story's UAE-impact figure (see impact_of)
 
 SCOPE = {"uae": "local", "region": "regional", "world": "international"}
 DOMAIN = {"politics": "political", "economy": "economic", "military": "military"}
@@ -244,12 +245,13 @@ def impact_of(rd: dict, n_sources: int) -> tuple[int, str]:
     """0-100 potential impact on the UAE for a Radar story.
 
     Starts from the same headline heuristic as every other story (so the numbers stay comparable across the page), then
-    adds what the Radar's own analysis says about the story: a key development, cited in the UAE implications, risks or
-    opportunities, directly about the UAE."""
+    adds a SMALL lift for what the Radar's own analysis says about the story (a key development, cited in the UAE
+    implications, risks or opportunities, directly about the UAE). The lift is capped (BONUS_MAX): a day-old story must
+    not outrank today's live news just because the Radar wrote about it."""
     base, why = C.assess(rd["text"], rd["scope"], n_sources)
     bonus = (8 if rd["key_dev"] else 0) + (10 if rd["impl"] else 0) + (5 if rd["risk"] else 0) \
         + (4 if rd["cited"] and not rd["impl"] and not rd["risk"] else 0) + (5 if rd["uae_related"] else 0)
-    impact = int(max(5, min(96, base + bonus)))
+    impact = int(max(5, min(96, base + min(bonus, BONUS_MAX))))
     return impact, rd["why"] or (why if impact > 33 else "")
 
 

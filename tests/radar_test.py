@@ -45,16 +45,15 @@ check("no Radar story absorbed headlines of two different events (no false merge
 attached = sum(1 for it in rit for s in it["sources"] if s["url"] in truth)
 check("most live headlines about Radar events joined their Radar story", attached >= 25, attached)
 check("a Radar story keeps its own sources first, with live ones after", all(it["sources"][0]["url"].startswith("https://") for it in rit), None)
-radar_events = {truth[s["url"]] for it in rit for s in it["sources"] if s["url"] in truth} & real
-left = [it for it in items[:12] if not it.get("radar") and ({truth.get(s["url"]) for s in it["sources"]} & radar_events)]
-check("live headlines that repeat a Radar event do not sit in the top 12", not left, [i["title"] for i in left])
+top12 = items[:12]
+check("the top 10 shows different stories: none repeats a better-ranked one (dup < 15)", all(i["dup"] < 15 for i in items[:10]), [(i["title"][:30], i["dup"]) for i in items[:10]])
 
 top = items[:10]
 per = {}
 for it in top:
     for e in {truth[s["url"]] for s in it["sources"] if s["url"] in truth} & real:
         per[e] = per.get(e, 0) + 1
-check("top 10: at least 7 Radar stories", sum(1 for i in top if i.get("radar")) >= 7, [bool(i.get("radar")) for i in top])
+check("top 10: live headlines still lead (the Radar gets no extra rank): at least 3 live-only items", sum(1 for i in top if not i.get("radar")) >= 3, [bool(i.get("radar")) for i in top])
 check("top 10: no event more than twice", per and max(per.values()) <= 2, per)
 check("top 10: at least 6 different events", len(per) >= 6, per)
 check("Radar summaries and dates are carried", all(i["summary"] and i["when"] for i in rit), None)
@@ -74,6 +73,44 @@ check("same article cited in two domains: both stories kept", len(sol2) == n_sto
 # --- window: an edition older than the window contributes no stories
 old = S.build_items(R.candidates(ed, now + timedelta(hours=30)), 24, now + timedelta(hours=30))
 check("24h window: an edition from 30h ago contributes nothing", not [i for i in old if i.get("radar")], None)
+# --- ranking: the Radar gets no extra rank (a live headline and the same headline from the edition rank alike)
+tw = cands[0]
+twin_live = [{"title": tw["title"], "url": tw["url"], "source": tw["source"], "published": tw["published"], "hint": tw["hint"], "host": tw["host"]}]
+a_item = S.build_items([tw], 48, now)[0]
+b_item = S.build_items(twin_live, 48, now)[0]
+check("a Radar story ranks like the same headline from the live feed (lift <= the capped impact bonus)",
+      0 <= a_item["importance"] - b_item["importance"] <= 0.65 * R.BONUS_MAX + 0.5, (a_item["importance"], b_item["importance"]))
+
+# --- the next day: yesterday's edition is ~23.5 h old, today's news is new. Fresh live news must lead, not the old stories.
+later = now + timedelta(hours=23.5)
+NEW = [  # (hours_ago, headline, outlet, host, hint, strong)
+    (1, "الإمارات ترفع حالة التأهب بعد هجوم بطائرات مسيّرة على ناقلة نفط قبالة سواحل الفجيرة", "العربية", "alarabiya.net", None, 1),
+    (2, "هجوم بمسيّرات يستهدف ناقلة قرب ميناء الفجيرة والسلطات الإماراتية تعلن السيطرة على الحريق", "الاتحاد", "aletihad.ae", "local", 1),
+    (3, "Drone attack hits tanker off Fujairah, UAE authorities say fire contained", "Reuters", "reuters.com", "international", 1),
+    (2, "المصرف المركزي الإماراتي يرفع أسعار الفائدة 25 نقطة أساس", "الخليج", "alkhaleej.ae", "local", 1),
+    (3, "الدرهم الإماراتي ثابت أمام الدولار بعد قرار المركزي رفع الفائدة", "البيان", "albayan.ae", "local", 1),
+    (4, "النفط يقفز 5% مع تعطل الملاحة في خليج عُمان", "الشرق الأوسط", "aawsat.com", None, 1),
+    (4, "البنتاغون يعلن نشر منظومات دفاع جوي إضافية في الخليج", "سكاي نيوز عربية", "skynewsarabia.com", None, 1),
+    (6, "قطر والإمارات توقعان اتفاقية لتزويد الغاز المسال لمدة 15 عاماً", "الجزيرة", "aljazeera.net", None, 1),
+    (3, "مبابي يغيب عن مباراة الليلة بسبب إصابة في الكاحل", "الرياضية", "sports.example", None, 0),
+    (5, "طيران فلاي دبي تعلن جدول رحلات الشتاء الجديد", "البيان", "albayan.ae", "local", 0),
+    (8, "افتتاح معرض الكتاب في الشارقة الأسبوع المقبل", "وام", "wam.ae", "local", 0),
+]
+raw2, fresh_urls = [], {}
+for k, (h, t, src, host, hint, st) in enumerate(NEW, 1):
+    u = f"https://{host}/new/{k}"
+    raw2.append({"title": t, "url": u, "source": src, "published": later - timedelta(hours=h), "hint": hint, "host": host})
+    fresh_urls[u] = st
+cands_later = R.candidates(ed, later)
+for h in (24, 48):
+    it2 = S.build_items(raw2 + cands_later, h, later)
+    t10 = it2[:10]
+    live10 = sum(1 for i in t10 if any(s["url"] in fresh_urls for s in i["sources"]))
+    check(f"next day, {h}h window: fresh live news fills at least {5 if h == 24 else 4} of the top 10 (yesterday's edition does not take over)",
+          live10 >= (5 if h == 24 else 4), live10)
+    check(f"next day, {h}h window: the freshest strong story is first", any(s["url"] in fresh_urls and fresh_urls[s["url"]] for s in it2[0]["sources"]) and "الفجيرة" in it2[0]["title"], it2[0]["title"])
+    check(f"next day, {h}h window: first place is a live story, not an edition one", not it2[0].get("radar"), it2[0].get("radar"))
+
 # --- freshness / validation
 check("freshness: fresh inside the limit, stale outside", R.age_hours(ed, now + timedelta(hours=1)) < R.MAX_AGE_H < R.age_hours(ed, now + timedelta(hours=40)), None)
 check("a non-Arabic or source-less story is dropped by validation", R._validate({"created_at": ed["created"].isoformat(), "domains": {"politics": {"stories": [{"ref": 1, "level": "uae", "title": "English only", "sources": [{"name": "x", "url": "https://a.example/1"}]}]}}}) is None, None)

@@ -4,7 +4,7 @@
     python3 tools/verify_bg.py           # compare against tools/bg.lock (exit 1 on any change)
     python3 tools/verify_bg.py --update  # only when you INTENTIONALLY change the background
 
-It hashes (1) the background file that the BG-LOCK block references (public/bg-news.svg) and (2) the CSS block
+It hashes (1) every background file that the BG-LOCK block references (public/bg-day.svg, public/bg-night.svg) and (2) the CSS block
 between BG-LOCK-START / BG-LOCK-END in style.css.
 To change the background: save the new art under a NEW file name (so installed Service Workers never serve a stale copy),
 point the BG-LOCK block and SHELL in sw.js at it, then run --update.
@@ -24,11 +24,12 @@ def current():
     m = re.search(r"/\* BG-LOCK-START \*/(.*?)/\* BG-LOCK-END \*/", css, re.S)
     if not m:
         sys.exit("BG-LOCK block missing from style.css")
-    f = re.search(r'url\("/([^"?]+)"\)', m.group(1))
-    if not f:
+    files = sorted(set(re.findall(r'url\("/([^"?]+)"\)', m.group(1))))
+    if not files:
         sys.exit("BG-LOCK block does not reference a background file")
-    svg = (root / "public" / f.group(1)).read_bytes()
-    return {f.group(1): hashlib.sha256(svg).hexdigest(), "style.css BG-LOCK block": hashlib.sha256(m.group(1).strip().encode()).hexdigest()}
+    out = {f: hashlib.sha256((root / "public" / f).read_bytes()).hexdigest() for f in files}
+    out["style.css BG-LOCK block"] = hashlib.sha256(m.group(1).strip().encode()).hexdigest()
+    return out
 
 
 cur = current()
@@ -37,7 +38,7 @@ if "--update" in sys.argv:
     print("lock updated:", cur)
     sys.exit(0)
 old = json.loads(lock.read_text(encoding="utf-8"))
-bad = [k for k in cur if cur[k] != old.get(k)]
+bad = [k for k in cur if cur[k] != old.get(k)] + [k for k in old if k not in cur]
 for k in cur:
     print(("OK      " if k not in bad else "CHANGED ") + k + "  " + cur[k][:16])
 sys.exit(1 if bad else 0)

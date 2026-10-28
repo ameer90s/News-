@@ -257,6 +257,9 @@ async def enrich(payload: dict) -> dict:
     tr_items = _sanitize_items(payload.get("translate"), sources.MAX_TRANSLATE)
     an_items = [i for i in _sanitize_items(payload.get("items"), 25) if C.is_arabic(i["title"])]
     do_an = len(an_items) >= 3
+    # Stories curated by «رادار الأخبار» are context for the analysis but their impact is the Radar's own: not re-scored
+    rs_items = [i for i in an_items if not i.get("radar")]
+    ctx_items = [i for i in an_items if i.get("radar")]
     if not tr_items and not do_an:
         return {"ok": True, "translations": {}}
 
@@ -281,14 +284,19 @@ async def enrich(payload: dict) -> dict:
             '"economic": {"text": "تحليل اقتصادي موجز (حتى 260 حرفًا)", "uae_impact": 0}, '
             '"military": {"text": "تحليل عسكري موجز (حتى 260 حرفًا)", "uae_impact": 0}. '
             'uae_impact عدد صحيح من 0 إلى 100 لتأثير أهم تطور في ذلك المجال على الإمارات؛ وإن لم يوجد خبر في المجال فاكتب ذلك باختصار وضع تأثيرًا منخفضًا.')
-        parts.append(
-            '(3) إعادة التقييم: لكل خبر في "items" قدّر تأثيره المحتمل على الإمارات من 0 إلى 100 سواء كان الحدث إماراتيًا أو بعيدًا عنها، '
-            'مع سبب قصير بالعربية (حتى 70 حرفًا). الحدث البعيد يرتفع تأثيره فقط إذا وُجدت قناة واضحة تصل إلى الإمارات '
-            '(الطاقة، الملاحة والطيران، التجارة والعقوبات، المال العالمي، قوى كبرى شريكة، التقنية، مؤسسات دولية)، وإلا فتأثيره منخفض. '
-            'لا تبالغ. المفتاح: "items": {"<id>": {"impact": 0, "why": "..."}}')
-        data_in["items"] = [{"id": i["id"], "title": i["title"], "scope": _LABEL.get(i.get("scope"), "دولي"),
-                             "domain": _DNAME.get(i.get("domain"), "سياسي"), "estimated_impact": _impact(i.get("uae_impact"))}
-                            for i in an_items]
+        row = lambda i: {"id": i["id"], "title": i["title"], "scope": _LABEL.get(i.get("scope"), "دولي"),
+                         "domain": _DNAME.get(i.get("domain"), "سياسي"), "estimated_impact": _impact(i.get("uae_impact"))}
+        if ctx_items:
+            parts.append('اعتمد في (2) على عناوين "items" و"radar_items" معًا؛ "radar_items" أخبار منتقاة بعناية من نشرة الرادار اليومية '
+                         '(تدخل في التحليل ولا تحتاج إعادة تقييم).')
+            data_in["radar_items"] = [row(i) for i in ctx_items]
+        if rs_items:
+            parts.append(
+                '(3) إعادة التقييم: لكل خبر في "items" قدّر تأثيره المحتمل على الإمارات من 0 إلى 100 سواء كان الحدث إماراتيًا أو بعيدًا عنها، '
+                'مع سبب قصير بالعربية (حتى 70 حرفًا). الحدث البعيد يرتفع تأثيره فقط إذا وُجدت قناة واضحة تصل إلى الإمارات '
+                '(الطاقة، الملاحة والطيران، التجارة والعقوبات، المال العالمي، قوى كبرى شريكة، التقنية، مؤسسات دولية)، وإلا فتأثيره منخفض. '
+                'لا تبالغ. المفتاح: "items": {"<id>": {"impact": 0, "why": "..."}}')
+        data_in["items"] = [row(i) for i in rs_items]
     prompt = "\n".join(parts) + f"\nالمدة: آخر {hours} ساعة.\nالبيانات:\n" + json.dumps(data_in, ensure_ascii=False)
     try:
         data = await asyncio.to_thread(_generate, prompt, 6144)
@@ -315,7 +323,7 @@ async def enrich(payload: dict) -> dict:
                 text, imp = _clean(blk.get("text"), 360), _impact(blk.get("uae_impact"))
                 if len(text) >= 20 and C.is_arabic(text) and imp is not None:
                     result["analysis"][d] = {"text": text, "uae_impact": imp}
-            result["rescored"] = _rescored(data, an_items)
+            result["rescored"] = _rescored(data, rs_items)
             if not tr_items:
                 _ANALYSIS_CACHE[sig] = (time.monotonic(), result)
                 while len(_ANALYSIS_CACHE) > 50:
