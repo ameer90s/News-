@@ -1,12 +1,15 @@
 """«رادار الأخبار» edition + live headlines.  Usage: python3 -I tests/radar_test.py <project>
 
-Merges the shipped edition (data/radar/latest.json) with the war-cycle fixture (the same events reported by many outlets)
-and checks that live headlines join the right Radar story, never a wrong one, and that the lists stay varied."""
+Merges a fixed edition (tests/fixtures/radar_edition_2026-10-27.json; from 1.3.0 data/radar/latest.json belongs to the
+scheduled «نشرة المرصد» task and is not shipped in the release ZIP) with the war-cycle fixture (the same events reported by
+many outlets) and checks that live headlines join the right Radar story, never a wrong one, and that the lists stay varied."""
 import copy
 import json
+import os
 import sys
 from datetime import timedelta
 
+os.environ.setdefault("RADAR_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "radar_edition_2026-10-27.json"))
 sys.path.insert(0, sys.argv[1])
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
 from core import radar as R, sources as S

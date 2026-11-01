@@ -1,12 +1,10 @@
 /* مرصد الإمارات الذكي — Service Worker. ارفع VERSION مع كل إصدار (tools/bump_version.py). */
-const VERSION = '1.2.1';
+const VERSION = '2.0.0';
 const CACHE = 'mirsad-' + VERSION;
 const SHELL = [
   '/',
   '/style.css?v=' + VERSION,
-  '/app.js?v=' + VERSION,
-  '/bg-day.svg',
-  '/bg-night.svg'
+  '/app.js?v=' + VERSION
 ];
 
 self.addEventListener('install', (event) => {
@@ -44,7 +42,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Versioned static assets (?v=) and the locked background: cache first.
+  // Versioned static assets (?v=): cache first.
   event.respondWith(
     caches.match(req).then((hit) => hit || fetch(req).then((res) => {
       if (res.ok) {

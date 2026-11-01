@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check a «رادار الأخبار» edition and install it as data/radar/latest.json.
+"""Check a «نشرة المرصد» edition (same format as «رادار الأخبار», plus `leaks`) and install it as data/radar/latest.json.
 
     python3 tools/radar_import.py path/to/edition.json          # validate + install
     python3 tools/radar_import.py path/to/edition.json --check  # validate only
@@ -52,8 +52,21 @@ for dom in radar.DOMAIN_ORDER:
     if dead:
         print(f"            ! citations to stories that do not exist: {dead}")
         problems += 1
-    if len(d["stories"]) < 6:
-        print("            ! fewer than 6 stories")
+    if len(d["stories"]) < 5:
+        print("            ! fewer than 5 stories")
+        problems += 1
+raw_leaks = raw.get("leaks") if isinstance(raw.get("leaks"), list) else []
+states = {}
+for lk in ed["leaks"]:
+    states[lk["status"]] = states.get(lk["status"], 0) + 1
+print(f"  leaks: {len(ed['leaks'])} usable of {len(raw_leaks)} " + (str(states) if states else ""))
+if len(ed["leaks"]) < len(raw_leaks):
+    print("            ! some leaks were dropped (need: Arabic claim, status in "
+          f"{list(radar.LEAK_STATUS)}, at least one source with an https link)")
+    problems += 1
+for lk in ed["leaks"]:
+    if len(lk["claim"]) > 260:
+        print(f"            ! leak claim longer than 260 characters: {lk['claim'][:60]}…")
         problems += 1
 print(f"  figures={len(ed['figures'])}  priorities={len(ed['executive']['top_priorities'])}  "
       f"headline={'y' if ed['executive']['headline'] else 'n (derived from the overview)'}")

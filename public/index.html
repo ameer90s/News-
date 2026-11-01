@@ -3,138 +3,137 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#dff2ff">
+<meta name="theme-color" content="#0B0F1A">
 <meta name="color-scheme" content="light dark">
 <title>مرصد الإمارات الذكي</title>
 <script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); });</script>
 <script>(function () { var t = 'day'; try { if (JSON.parse(localStorage.getItem('mirsad.theme')) === 'night') t = 'night'; } catch (e) {}
-  document.documentElement.setAttribute('data-theme', t);
-  var m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute('content', t === 'night' ? '#4a38c0' : '#dff2ff'); })();</script>
+  document.documentElement.setAttribute('data-theme', t); })();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/style.css?v=1.2.1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Lalezar&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/style.css?v=2.0.0">
 </head>
 <body>
-<div class="bg" aria-hidden="true"></div>
+<div class="bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="grid"></i></div>
 
 <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
   <defs>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v5h-5"/></symbol>
     <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5.5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="18.5" r="2.6"/><path d="M8.3 10.7l7.4-3.9M8.3 13.3l7.4 3.9"/></symbol>
     <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3.4 3.4 3.4 14.6 0 18M12 3c-3.4 3.4-3.4 14.6 0 18"/></symbol>
-    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2.5L4.5 14H11l-1 7.5L19.5 10H13z"/></symbol>
     <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 9.5L12 4l9 5.5M5.5 10v7.5M10 10v7.5M14 10v7.5M18.5 10v7.5M3.5 20h17"/></symbol>
     <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 4.5V20h16M8 15.5l3.5-3.8 3 2.6L20 8M15.5 8H20v4.5"/></symbol>
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 2.8v6c0 4.7-3.2 7.9-7.5 9.2-4.3-1.3-7.5-4.5-7.5-9.2v-6z"/><path d="M8.6 12.2l2.5 2.5 4.4-4.9"/></symbol>
     <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-6.5 8 6.5v8.5a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></symbol>
-    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3.2s6 6.4 6 11a6 6 0 0 1-12 0c0-4.6 6-11 6-11z"/></symbol>
-    <symbol id="i-plane" viewBox="0 0 24 24"><path d="M21 15.5v-1.6l-7.5-4.6V4.5a1.5 1.5 0 0 0-3 0v4.8L3 13.9v1.6l7.5-2.2v4.6L8.8 19.4V21l3.2-.9 3.2.9v-1.6l-1.7-1.5v-4.6z"/></symbol>
-    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM18.5 16l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
+    <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M2.5 12H7l2-5 4 10 2-5h6.5"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3.5h9l4 4V20a.5.5 0 0 1-.5.5h-12A.5.5 0 0 1 6 20z"/><path d="M9 11h7M9 15h7"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></symbol>
     <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 5.5L8.5 12 15 18.5"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 5.5l6.5 6.5L9 18.5"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
     <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.2A8.4 8.4 0 0 1 9.8 4a8.5 8.5 0 1 0 10.2 10.2z"/></symbol>
     <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3L17 7M7 17l-1.7 1.7"/></symbol>
-    <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6.3-6.3"/></symbol>
     <symbol id="i-out" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor" stroke="none"/></symbol>
   </defs>
 </svg>
 
 <div class="app">
-  <header class="hdr glass">
-    <div class="hdr-top">
-      <h1 id="appTitle">مرصد الإمارات الذكي</h1>
-      <button class="theme-btn" id="themeBtn" type="button" aria-label="التبديل إلى الوضع الليلي"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg></button>
-      <div class="clock" id="clockBox">
-        <svg class="flag" viewBox="0 0 60 30" role="img" aria-label="علم الإمارات">
-          <defs><clipPath id="flagClip"><rect width="60" height="30" rx="3"/></clipPath></defs>
-          <g clip-path="url(#flagClip)">
-            <rect width="60" height="30" fill="#ffffff"/>
-            <rect x="15" width="45" height="10" fill="#00732f"/>
-            <rect x="15" y="20" width="45" height="10" fill="#000000"/>
-            <rect width="15" height="30" fill="#ef3340"/>
-          </g>
-        </svg>
-        <time id="clock">--:--</time>
-      </div>
+  <header class="hdr" id="top">
+    <div class="hrow">
+      <a class="brand" id="storyLink" href="#story" aria-label="مرصد الإمارات الذكي: النشرة في 60 ثانية">
+        <span class="ring" aria-hidden="true"><i class="ring-spin"></i><span class="ring-in"><svg viewBox="0 0 40 20" width="26" height="13"><path d="M0 10H9L12 3L16 17L20 6L23 10H40" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><i class="ring-dot" id="ringDot" hidden></i></span>
+        <h1 id="appTitle">مرصد الإمارات الذكي</h1>
+      </a>
+      <button class="ibtn" id="themeBtn" type="button" aria-label="التبديل إلى الوضع الليلي"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg></button>
     </div>
     <p class="tagline" id="tagline">متابعة ذكية لأهم الأخبار واتجاهاتها وتأثيرها المحتمل على الإمارات.</p>
-    <div class="controls">
-      <button class="btn btn-refresh" id="refreshBtn" type="button">
+    <div class="status" id="status">
+      <span class="live"><i class="dot" aria-hidden="true"></i><span class="lbl">مباشر</span></span>
+      <button class="rbtn" id="refreshBtn" type="button">
         <span class="spin" aria-hidden="true"></span>
         <svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>
-        <span id="refreshLabel">تحديث</span>
+        <span id="refreshLabel" class="rw">تحديث</span>
+        <b id="lastTime">--</b>
       </button>
-      <button class="btn" id="shareBtn" type="button">
-        <svg class="ic" aria-hidden="true"><use href="#i-share"/></svg>
-        <span>مشاركة</span>
-      </button>
-      <div class="last" id="lastUpdate"><i class="dot" aria-hidden="true"></i>آخر تحديث: <span id="lastTime">--</span></div>
+      <i class="vsep" aria-hidden="true"></i>
+      <span class="clock" id="clockBox">
+        <svg class="flag" viewBox="0 0 60 30" role="img" aria-label="علم الإمارات"><rect width="60" height="30" rx="3" fill="#ffffff"/><rect x="15" width="45" height="10" fill="#00732f"/><rect x="15" y="20" width="45" height="10" fill="#000000"/><rect width="15" height="30" fill="#ef3340"/></svg>
+        <time id="clock">--:--</time>
+      </span>
+      <button class="sbtn" id="shareBtn" type="button" aria-label="مشاركة"><svg class="ic" aria-hidden="true"><use href="#i-share"/></svg></button>
     </div>
   </header>
 
-  <nav class="ranges glass" id="ranges" aria-label="مدة الأخبار">
-    <button type="button" data-h="6">6 ساعات</button>
-    <button type="button" data-h="12">12 ساعة</button>
-    <button type="button" data-h="24" class="on">24 ساعة</button>
-    <button type="button" data-h="48">48 ساعة</button>
-    <button type="button" data-h="72">72 ساعة</button>
-  </nav>
+  <div class="ticker" id="ticker" hidden>
+    <span class="tk-lbl"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>عاجل</span>
+    <div class="tk-win"><div class="tk-strip" id="tickerStrip"></div></div>
+  </div>
 
   <main>
-    <section class="card glass" id="bigPicture" aria-labelledby="bpHead">
-      <div class="card-head">
-        <span class="hchip"><svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg></span>
-        <h2 id="bpHead">الصورة الكبرى</h2>
-        <span class="slot-ai" id="bpAi"></span>
-      </div>
-      <h3 id="bpTitle" class="bp-title"></h3>
-      <p id="bpSummary" class="bp-sum"></p>
-      <button type="button" class="foot" id="bpMore"><svg class="ic" aria-hidden="true"><use href="#i-radar"/></svg><span>التحليل الكامل <em id="bpSrc"></em></span><span class="sp"></span><svg class="ic" aria-hidden="true"><use href="#i-left"/></svg></button>
+    <section class="hero" id="hero" aria-labelledby="heroTitle">
+      <div class="scan" aria-hidden="true"></div>
+      <div class="hero-top"><span class="hchip-slot" id="heroChip"></span><span class="hnext" id="heroNext">النشرة التالية <b id="nextEd">--</b></span></div>
+      <h2 id="heroTitle"></h2>
+      <div class="lanes" id="lanes" aria-label="نبض المجالات: سرعة النبض تتبع مستوى التأثير على الإمارات"></div>
+      <p class="hero-sum" id="heroSum"></p>
+      <button class="cta" id="heroMore" type="button">اقرأ النشرة كاملة</button>
     </section>
 
-    <section class="domains" id="domains" aria-label="مستوى التأثير حسب المجال"></section>
-
-    <section class="card glass" id="latest" aria-labelledby="latestHead">
-      <div class="card-head">
-        <span class="hchip"><svg class="ic" aria-hidden="true"><use href="#i-bolt"/></svg></span>
-        <h2 id="latestHead">آخر الأخبار الهامة</h2>
-        <a class="all-link" href="#top" id="allLink"><span>عرض الكل</span><svg class="ic" aria-hidden="true"><use href="#i-left"/></svg></a>
-      </div>
-      <div class="list" id="latestList"></div>
+    <section class="strip" id="figures" aria-labelledby="figH" hidden>
+      <div class="sh"><h3 id="figH">أرقام اليوم</h3><small id="figSrc"></small></div>
+      <div class="tiles" id="tiles"></div>
     </section>
 
-    <section class="card glass" id="analysis" aria-labelledby="anHead">
-      <div class="card-head">
-        <span class="hchip"><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg></span>
-        <h2 id="anHead">التحليل المتكامل</h2>
-        <span class="slot-ai" id="anAi"></span>
+    <section class="sec" id="live" aria-labelledby="liveH">
+      <div class="sh"><i class="beat" aria-hidden="true"></i><h3 id="liveH">مباشر</h3><small id="liveCount"></small></div>
+      <div class="seg3" id="periodTabs" role="tablist" aria-label="الفترة">
+        <button type="button" role="tab" data-p="edition">منذ آخر نشرة</button>
+        <button type="button" role="tab" data-p="today">اليوم</button>
+        <button type="button" role="tab" data-p="days3">3 أيام</button>
       </div>
-      <div class="an-list" id="anList"></div>
+      <div class="chips" id="scopeChips" role="tablist" aria-label="نطاق الأخبار">
+        <button type="button" role="tab" data-s="all">الكل</button>
+        <button type="button" role="tab" data-s="local">محلية</button>
+        <button type="button" role="tab" data-s="regional">إقليمية</button>
+        <button type="button" role="tab" data-s="international">دولية</button>
+        <button type="button" role="tab" data-s="impact">مؤثرة</button>
+      </div>
+      <div class="timeline" id="liveList"></div>
+      <button class="more" id="liveMore" type="button" hidden>عرض كل الأخبار</button>
     </section>
 
-    <section class="card glass" id="top" aria-labelledby="topHead">
-      <div class="card-head">
-        <span class="hchip"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></span>
-        <h2 id="topHead">الأخبار الأعلى أهمية</h2>
+    <section class="sec" id="analysis" aria-labelledby="anH">
+      <div class="sh"><h3 id="anH">التحليل</h3><span class="slot-badge" id="anBadge"></span></div>
+      <div class="dtabs" id="domainTabs" role="tablist" aria-label="المجال">
+        <button type="button" role="tab" data-d="political">سياسي</button>
+        <button type="button" role="tab" data-d="economic">اقتصادي</button>
+        <button type="button" role="tab" data-d="military">عسكري</button>
       </div>
-      <div class="tabs" id="scopeTabs" role="tablist" aria-label="نطاق الأخبار">
-        <button type="button" role="tab" data-s="all" class="on" aria-selected="true">الكل</button>
-        <button type="button" role="tab" data-s="local" aria-selected="false">محلية</button>
-        <button type="button" role="tab" data-s="regional" aria-selected="false">إقليمية</button>
-        <button type="button" role="tab" data-s="international" aria-selected="false">دولية</button>
-        <button type="button" role="tab" data-s="impact" aria-selected="false">مؤثرة</button>
-      </div>
-      <div class="list" id="topList"></div>
+      <div id="anBody"></div>
+    </section>
+
+    <section class="sec" id="agenda" aria-labelledby="agH" hidden>
+      <div class="sh"><h3 id="agH">خلال 48 ساعة</h3><small>ما يجب مراقبته</small></div>
+      <div class="aglist" id="agList"></div>
+    </section>
+
+    <section class="sec" id="leaks" aria-labelledby="lkH">
+      <div class="sh"><span class="rchip" aria-hidden="true"><i></i><svg class="ic"><use href="#i-eye"/></svg></span><h3 id="lkH">ملف الإشاعات</h3><small>تسريبات وإشاعات</small></div>
+      <p class="lk-note">ادعاءات منقولة عن مصادر مسمّاة، ليست كلها مؤكدة. الختم يبيّن حالة كل ادعاء، ومعه درجة الثقة والمصدر.</p>
+      <div class="lklist" id="leakList"></div>
     </section>
   </main>
 </div>
 
-<nav class="tabbar glass" id="tabbar" aria-label="التنقل">
-  <button type="button" data-d="all" class="on"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg><span>الرئيسية</span></button>
-  <button type="button" data-d="political"><svg class="ic" aria-hidden="true"><use href="#i-bank"/></svg><span>سياسي</span></button>
-  <button type="button" data-d="economic"><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg><span>اقتصادي</span></button>
-  <button type="button" data-d="military"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg><span>عسكري</span></button>
+<nav class="nav" id="nav" aria-label="التنقل">
+  <button type="button" data-go="top" class="on"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg><span>الرئيسية</span></button>
+  <button type="button" data-go="live"><svg class="ic" aria-hidden="true"><use href="#i-pulse"/></svg><span>مباشر</span></button>
+  <button type="button" data-go="edition"><svg class="ic" aria-hidden="true"><use href="#i-doc"/></svg><span>النشرة</span></button>
+  <button type="button" data-go="leaks"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><span>الإشاعات</span></button>
 </nav>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -146,6 +145,35 @@
   </div>
 </dialog>
 
-<script src="/app.js?v=1.2.1" defer></script>
+<div class="story" id="story" role="dialog" aria-modal="true" aria-label="النشرة في 60 ثانية" hidden>
+  <div class="st-bg" id="stBg" aria-hidden="true"></div>
+  <div class="st-shade" aria-hidden="true"></div>
+  <div class="st-in">
+    <div class="st-bars" id="stBars"></div>
+    <div class="st-head">
+      <span class="st-av" aria-hidden="true"><svg viewBox="0 0 40 20" width="26" height="13"><path d="M0 10H10L13 3L17 17L21 6L24 10H40" fill="none" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span class="st-who"><b>نشرة المرصد</b><small id="stLabel"></small></span>
+      <span class="st-left">تبقّى <b id="stLeft">60</b> ث</span>
+      <button type="button" class="st-btn" id="stPause" aria-label="إيقاف مؤقت"><svg class="ic" aria-hidden="true"><use href="#i-pause"/></svg></button>
+      <button type="button" class="st-btn" id="stClose" aria-label="إغلاق"><svg class="ic" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="st-body">
+      <button type="button" class="st-zone st-zprev" id="stZonePrev" aria-label="الخبر السابق"></button>
+      <button type="button" class="st-zone st-znext" id="stZoneNext" aria-label="الخبر التالي"></button>
+      <div class="st-num"><span id="stNum" aria-hidden="true">1</span><span class="st-dom" id="stDom"></span></div>
+      <h2 id="stTitle"></h2>
+      <p id="stSum"></p>
+      <div class="st-imp"><span>التأثير على الإمارات</span><div class="st-meter"><i id="stMeter"></i></div><b id="stPct" dir="ltr"></b><b id="stLvl"></b></div>
+      <div class="st-why" id="stWhyBox"><b>لماذا يهم الإمارات</b><span id="stWhy"></span></div>
+      <div class="st-src"><svg class="ic" aria-hidden="true"><use href="#i-out"/></svg>المصدر: <a id="stSrc" target="_blank" rel="noopener noreferrer"></a></div>
+    </div>
+    <div class="st-nav">
+      <button type="button" class="st-prev" id="stPrev"><svg class="ic" aria-hidden="true"><use href="#i-right"/></svg>السابق</button>
+      <button type="button" class="st-next" id="stNext">التالي<svg class="ic" aria-hidden="true"><use href="#i-left"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js?v=2.0.0" defer></script>
 </body>
 </html>

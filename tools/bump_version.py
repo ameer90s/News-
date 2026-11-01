@@ -5,7 +5,7 @@
 
 Updates: ?v= on style.css / app.js (index.html), the sw.js registration URL (app.js),
 VERSION in sw.js (new cache name -> old caches are deleted on activate).
-It never touches the background block in style.css or the background file (bg-day.svg / bg-night.svg).
+It never touches the background block in style.css (BG-LOCK).
 """
 import pathlib
 import re

@@ -1,8 +1,10 @@
-"""«رادار الأخبار» edition → Mirsad.
+"""«نشرة المرصد» edition → Mirsad.
 
-The Radar is a daily analytical brief written by Claude after reading the articles themselves (three domains × three
-levels: UAE / region / world, ~10 stories per domain, with analysis, risks, opportunities, UAE implications, outlook and a
-watch list). Its latest edition is stored as one JSON file, `data/radar/latest.json`, in the Radar's own format.
+The edition is an analytical brief written by Claude after reading the articles themselves (three domains × three levels:
+UAE / region / world, ~10 stories per domain, with analysis, risks, opportunities, UAE implications, outlook, a watch list
+and, from 1.3.0, a list of leaks and rumours with their status). Since 1.3.0 a scheduled task writes a UAE-focused edition
+twice a day (format: same as «رادار الأخبار», see tools/edition_task.md); it is stored as one JSON file,
+`data/radar/latest.json`.
 
 While that edition is fresh (default: younger than 36 hours) Mirsad uses it as its curated core:
   * its stories become news items (Arabic title, summary, original sources, «why it matters for the UAE») that merge with
@@ -33,6 +35,10 @@ SCOPE = {"uae": "local", "region": "regional", "world": "international"}
 DOMAIN = {"politics": "political", "economy": "economic", "military": "military"}
 DOMAIN_ORDER = ("politics", "economy", "military")
 RISK = {"منخفض": "low", "متوسط": "mid", "مرتفع": "high"}
+# leaks & rumours: a claim is never shown without its status and at least one named source with a link
+LEAK_STATUS = {"غير مؤكد": "unverified", "مؤكد جزئيًا": "partial", "نُفي رسميًا": "denied", "تأكّد": "confirmed"}
+LEAK_CONF = ("منخفضة", "متوسطة", "عالية")
+MAX_LEAKS = 10
 
 _CITE = re.compile(r"\[(\d+(?:\s*[,،]\s*\d+)*)\]")
 _cache: dict = {"mtime": None, "path": None, "ed": None}
@@ -131,6 +137,24 @@ def _validate(raw) -> dict | None:
     if len(domains) < 2:
         return None
     ex = raw.get("executive") if isinstance(raw.get("executive"), dict) else {}
+    leaks = []
+    for lk in (raw.get("leaks") if isinstance(raw.get("leaks"), list) else [])[:MAX_LEAKS * 2]:
+        if not isinstance(lk, dict):
+            continue
+        claim, status = _s(lk.get("claim"), 400), _s(lk.get("status"), 20)
+        srcs = [{"name": _s(x.get("name"), 80) or "المصدر", "url": x["url"].strip()}
+                for x in (lk.get("sources") if isinstance(lk.get("sources"), list) else [])[:4]
+                if isinstance(x, dict) and _http_url(x.get("url"))]
+        if not (claim and C.is_arabic(claim) and status in LEAK_STATUS and srcs):
+            continue
+        dom = lk.get("domain") if lk.get("domain") in DOMAIN else None
+        leaks.append({"claim": claim, "status": status, "state": LEAK_STATUS[status],
+                      "confidence": _s(lk.get("confidence"), 12) if _s(lk.get("confidence"), 12) in LEAK_CONF else "منخفضة",
+                      "domain": DOMAIN[dom] if dom else None, "level": lk.get("level") if lk.get("level") in SCOPE else None,
+                      "reported_by": _s(lk.get("reported_by"), 120), "when": _s(lk.get("when"), 30),
+                      "why": _s(lk.get("why"), 400), "denial": _s(lk.get("denial"), 300), "sources": srcs})
+        if len(leaks) >= MAX_LEAKS:
+            break
     figures = []
     for f in (raw.get("figures") if isinstance(raw.get("figures"), list) else [])[:12]:
         if isinstance(f, dict) and _s(f.get("label")) and _s(f.get("value"), 40):
@@ -143,7 +167,7 @@ def _validate(raw) -> dict | None:
                       "top_priorities": _list(ex.get("top_priorities"), 6), "cross_links": _list(ex.get("cross_links"), 6),
                       "next_48h": _list(ex.get("next_48h"), 6)},
         "figures": figures, "changes_since_last": _list(raw.get("changes_since_last"), 6),
-        "domains": domains,
+        "domains": domains, "leaks": leaks,
     }
 
 
@@ -277,4 +301,5 @@ def block(ed: dict, ids: dict[str, str]) -> dict:
         "id": ed["id"], "created_at": ed["created"].astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "label_ar": ed["label_ar"], "window_hours": ed["window_hours"], "executive": ed["executive"],
         "figures": ed["figures"], "changes_since_last": ed["changes_since_last"], "domains": domains,
+        "leaks": ed.get("leaks", []),
     }

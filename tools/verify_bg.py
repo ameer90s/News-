@@ -4,10 +4,11 @@
     python3 tools/verify_bg.py           # compare against tools/bg.lock (exit 1 on any change)
     python3 tools/verify_bg.py --update  # only when you INTENTIONALLY change the background
 
-It hashes (1) every background file that the BG-LOCK block references (public/bg-day.svg, public/bg-night.svg) and (2) the CSS block
-between BG-LOCK-START / BG-LOCK-END in style.css.
-To change the background: save the new art under a NEW file name (so installed Service Workers never serve a stale copy),
-point the BG-LOCK block and SHELL in sw.js at it, then run --update.
+It hashes (1) every background file that the BG-LOCK block references, if any, and (2) the CSS block between
+BG-LOCK-START / BG-LOCK-END in style.css.
+Since 2.0.0 the background is pure CSS (animated colour blobs + grid, day and night), so the block references no file and
+only the CSS block is hashed. If a background file is ever used again: save it under a NEW file name (so installed Service
+Workers never serve a stale copy), point the BG-LOCK block and SHELL in sw.js at it, then run --update.
 """
 import hashlib
 import json
@@ -25,8 +26,6 @@ def current():
     if not m:
         sys.exit("BG-LOCK block missing from style.css")
     files = sorted(set(re.findall(r'url\("/([^"?]+)"\)', m.group(1))))
-    if not files:
-        sys.exit("BG-LOCK block does not reference a background file")
     out = {f: hashlib.sha256((root / "public" / f).read_bytes()).hexdigest() for f in files}
     out["style.css BG-LOCK block"] = hashlib.sha256(m.group(1).strip().encode()).hexdigest()
     return out
