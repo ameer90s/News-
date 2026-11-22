@@ -32,7 +32,12 @@ date on each page; discard anything older than 24 hours. Exception (weekends and
 UAE stories inside 24 hours, you may add UAE stories up to 36 hours old that the previous edition did not cover; give their
 real date in "when".
 
-FOCUS: the UAE. Cover three domains: politics & diplomacy (سياسة), economy & markets (اقتصاد), military & security (عسكري وأمني).
+FOCUS: the UAE. The reader should understand in minutes, in Arabic, what each development means for the UAE's security,
+navigation, aviation, economy and markets. Cover three domains: politics & diplomacy (سياسة), economy & markets (اقتصاد),
+military & security (عسكري وأمني). Politics prioritizes UAE/Gulf positions, US-Iran mediation (Qatar and Oman), sanctions and
+UAE diplomacy. Economy prioritizes oil/Hormuz, aviation and cargo, UAE growth forecasts and market valuations, gold and
+stocks. Military/security prioritizes attacks on Bahrain, Kuwait and Saudi Arabia, tanker incidents and US force movements.
+Only include a non-UAE item when the story explains a direct, concrete UAE impact.
 For each domain look for, in this order:
 1. news ABOUT the UAE (federal, Abu Dhabi, Dubai, the other emirates): government decisions, laws and regulations, diplomacy
    and visits, deals and investments, markets, real estate, aviation and ports, energy, defence, security and cyber;
@@ -51,14 +56,18 @@ domain fails):
   amwaj.media, timesofisrael.com, middleeasteye.net (state its editorial line when you rely on it).
 - Military & security: defensenews.com, breakingdefense.com, twz.com, janes.com, navalnews.com, news.usni.org,
   lloydslist.com (headline-only), ukmto.org.
-Access rules: "headline-only" outlets cannot be fetched: use their headlines as leads and state details only after confirming
-them in a readable source; cite the outlet you actually read. These outlets are refused by the tools: wsj.com, ft.com,
+Access rules: "headline-only" outlets cannot be used as sources in the edition: use their headlines as leads and state details
+only after confirming them in a readable source; cite the outlet whose article you actually read. In particular, read the full
+available article from Gulf News, Khaleej Times, The National, Al-Monitor, الخليج or Arab News before including its claim.
+These outlets are refused by the tools: wsj.com, ft.com,
 reuters.com, apnews.com, nytimes.com, politico.com, economist.com, marketwatch.com. Do not reach them any other way (no mirrors,
 caches or archives). When a readable outlet explicitly reports their scoop, you may attribute it («بحسب وول ستريت جورنال، كما
 نقلت Al-Monitor») and cite the readable outlet.
 
-Key figures (only values you actually found inside the window): Dubai DFM index, Abu Dhabi ADX index, Brent, Murban, gold,
+Key figures (only values you actually found inside the window, or last clearly dated close on a weekend): Dubai DFM index, Abu Dhabi ADX index, Brent, Murban, gold,
 US 10-year yield, S&P 500, plus anything newly important for the UAE (EIBOR, Dubai real-estate transactions, Hormuz traffic).
+Give every number its measurement date and the source actually read. Never label a previous close as a live price, and never
+invent a price, percentage, forecast or casualty figure.
 
 ### Leaks and rumours (تسريبات وإشاعات) — a dedicated sweep
 Search the window for leaks and rumours that concern the UAE first, then the region: Arabic «تسريب», «وثائق مسربة», «مصادر
@@ -80,9 +89,9 @@ Rules:
 - 4–10 items; at least half about the UAE when such items exist. If the window has fewer real items, include fewer: never pad.
 
 ## 3. Select and write
-Per domain pick 5–10 stories (aim for 8–10) ranked by importance to the UAE: at least 4 at level "uae" when they exist (never
-fewer than 2), up to 3 "region" and up to 2 "world", and every region/world story must have a concrete link to the UAE (set
-uae_related accordingly). If a domain truly has fewer UAE stories, use fewer stories: never pad with minor or unrelated news. Number the
+Per domain pick up to 10 stories ranked by importance to the UAE: at least 2 at level "uae", up to 3 "region" and up to 2
+"world", and every region/world story must have a concrete link to the UAE (set uae_related accordingly). Prefer 5–10 stories
+when genuinely relevant, but never pad with minor or unrelated news. Number the
 stories 1..n within each domain, ordered uae → region → world.
 
 Write as a senior analyst briefing a decision-maker in the UAE, in a way that grabs attention by being specific: lead with what
@@ -141,7 +150,7 @@ assert not re.search(r"\[\d", e["executive"]["overview"]), "no story numbers in 
 for dom, d in e["domains"].items():
     st = d["stories"]
     refs = [s["ref"] for s in st]
-    assert 5 <= len(st) <= 10 and refs == list(range(1, len(refs) + 1)), dom
+    assert 2 <= len(st) <= 10 and refs == list(range(1, len(refs) + 1)), dom
     lv = [s["level"] for s in st]
     assert lv == sorted(lv, key=["uae", "region", "world"].index), dom
     assert lv.count("uae") >= 2, (dom, "too few UAE stories")
